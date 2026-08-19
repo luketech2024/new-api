@@ -1,0 +1,94 @@
+# ============================================================
+# WeChat Epay Adapter 站点 — 由 nginx 官方镜像 envsubst 自动渲染
+# 变量: ${PAY_DOMAIN} ${SSL_CERT} ${SSL_KEY}
+# ============================================================
+
+# HTTP -> HTTPS 重定向
+server {
+    listen 80;
+    server_name ${PAY_DOMAIN};
+    return 301 https://$host$request_uri;
+}
+
+# HTTPS 主站
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${PAY_DOMAIN};
+
+    client_max_body_size 5m;
+    client_body_timeout 60s;
+
+    # --- SSL ---
+    ssl_certificate      /etc/nginx/certs/${SSL_CERT};
+    ssl_certificate_key  /etc/nginx/certs/${SSL_KEY};
+    ssl_protocols        TLSv1.2 TLSv1.3;
+    ssl_ciphers          ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache    shared:SSL:10m;
+    ssl_session_timeout  10m;
+
+    # --- 安全头 ---
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "no-referrer" always;
+
+    # --- 公共代理头 (nginx:alpine 无 proxy_params, 内联) ---
+    # --- Epay 表单提交 ---
+    location = /submit.php {
+        proxy_pass http://wechat-epay-adapter:8080;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto  $scheme;
+    }
+
+    # --- 收银台页面 ---
+    location ^~ /cashier/ {
+        proxy_pass http://wechat-epay-adapter:8080;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto  $scheme;
+    }
+    location ^~ /api/v1/cashier/ {
+        proxy_pass http://wechat-epay-adapter:8080;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto  $scheme;
+    }
+
+    # --- 微信支付回调 ---
+    location = /api/v1/wechat/notify {
+        proxy_pass http://wechat-epay-adapter:8080;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto  $scheme;
+    }
+
+    # --- 健康检查 ---
+    location = /health/live {
+        proxy_pass http://wechat-epay-adapter:8080;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto  $scheme;
+    }
+    location = /health/ready {
+        proxy_pass http://wechat-epay-adapter:8080;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto  $scheme;
+    }
+
+    # --- 管理接口: 仅限内网访问 ---
+    location ^~ /api/v1/admin/ { deny all; }
+    location = /metrics { deny all; }
+
+    # --- 其他路径返回 404 ---
+    location / { return 404; }
+}
