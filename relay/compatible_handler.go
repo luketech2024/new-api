@@ -71,10 +71,20 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	adaptor.Init(info)
 
 	passThroughGlobal := model_setting.GetGlobalSettings().PassThroughRequestEnabled
+	useResponsesWebSearch := shouldUseResponsesWebSearch(info, request)
+	if shouldRejectUnsupportedWebSearch(info, request) {
+		return types.NewErrorWithStatusCode(
+			fmt.Errorf("web search is not enabled for channel #%d; use an Anthropic channel or enable OpenAI Responses web search for a compatible channel", info.ChannelId),
+			types.ErrorCodeInvalidRequest,
+			http.StatusBadRequest,
+			types.ErrOptionWithSkipRetry(),
+		)
+	}
 	if info.RelayMode == relayconstant.RelayModeChatCompletions &&
 		!passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
-		service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) {
+		(useResponsesWebSearch ||
+			service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName)) {
 		applySystemPromptIfNeeded(c, info, request)
 		usage, newApiErr := chatCompletionsViaResponses(c, info, adaptor, request)
 		if newApiErr != nil {
@@ -219,4 +229,20 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
 	}
 	return nil
+}
+
+func shouldUseResponsesWebSearch(info *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) bool {
+	return request != nil &&
+		request.WebSearchOptions != nil &&
+		info != nil &&
+		info.ChannelType == constant.ChannelTypeOpenAI &&
+		info.ChannelOtherSettings.OpenAIResponsesWebSearchEnabled
+}
+
+func shouldRejectUnsupportedWebSearch(info *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) bool {
+	return request != nil &&
+		request.WebSearchOptions != nil &&
+		info != nil &&
+		info.ChannelType != constant.ChannelTypeAnthropic &&
+		!shouldUseResponsesWebSearch(info, request)
 }

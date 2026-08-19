@@ -286,8 +286,8 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 	}
 
 	var toolsRaw json.RawMessage
-	if req.Tools != nil {
-		tools := make([]map[string]any, 0, len(req.Tools))
+	if req.Tools != nil || req.WebSearchOptions != nil {
+		tools := make([]map[string]any, 0, len(req.Tools)+1)
 		for _, tool := range req.Tools {
 			switch tool.Type {
 			case "function":
@@ -308,6 +308,15 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 				}
 				tools = append(tools, m)
 			}
+		}
+		if req.WebSearchOptions != nil {
+			webSearchTool := map[string]any{
+				"type": "web_search",
+			}
+			if req.WebSearchOptions.SearchContextSize != "" {
+				webSearchTool["search_context_size"] = req.WebSearchOptions.SearchContextSize
+			}
+			tools = append(tools, webSearchTool)
 		}
 		toolsRaw, _ = kitutil.Marshal(tools)
 	}

@@ -35,7 +35,7 @@ func validConfig(t *testing.T) Config {
 		WechatNotifyURL: "https://pay.example.com/api/v1/wechat/notify", WechatVerifyMode: VerifyModePublicKey,
 		WechatPublicKeyID: "pub-key-id", WechatPublicKeyFile: publicPath,
 		AdminAPIToken: "12345678901234567890123456789012", MetricsAPIToken: "abcdefghijabcdefghijabcdefghijab",
-		NotificationWorkers: 2, LogLevel: "info",
+		NotificationWorkers: 2, LogLevel: "info", LogDir: t.TempDir(),
 	}
 }
 

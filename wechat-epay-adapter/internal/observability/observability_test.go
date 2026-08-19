@@ -3,6 +3,8 @@ package observability
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -13,6 +15,51 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
+
+func TestDailyLogWriterRotatesByDate(t *testing.T) {
+	dir := t.TempDir()
+	firstDay := time.Date(2026, time.August, 18, 23, 59, 59, 0, time.Local)
+	writer := &dailyLogWriter{dir: dir, now: func() time.Time { return firstDay }}
+	t.Cleanup(func() {
+		if writer.file != nil {
+			require.NoError(t, writer.file.Close())
+		}
+	})
+
+	_, err := writer.Write([]byte("first\n"))
+	require.NoError(t, err)
+	writer.now = func() time.Time { return firstDay.AddDate(0, 0, 1) }
+	_, err = writer.Write([]byte("second\n"))
+	require.NoError(t, err)
+
+	firstData, err := os.ReadFile(filepath.Join(dir, "20260818", "wechat-epay.log"))
+	require.NoError(t, err)
+	secondData, err := os.ReadFile(filepath.Join(dir, "20260819", "wechat-epay.log"))
+	require.NoError(t, err)
+	assert.Equal(t, "first\n", string(firstData))
+	assert.Equal(t, "second\n", string(secondData))
+}
+
+func TestDailyLogWriterAddsSequenceAfterLogCountLimit(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, time.August, 18, 12, 0, 0, 0, time.Local)
+	writer := &dailyLogWriter{dir: dir, now: func() time.Time { return now }}
+	t.Cleanup(func() {
+		if writer.file != nil {
+			require.NoError(t, writer.file.Close())
+		}
+	})
+
+	_, err := writer.Write([]byte("first\n"))
+	require.NoError(t, err)
+	writer.count = maxLogCount
+	_, err = writer.Write([]byte("next\n"))
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(filepath.Join(dir, "20260818", "wechat-epay-1.log"))
+	require.NoError(t, err)
+	assert.Equal(t, "next\n", string(data))
+}
 
 func TestMetricsExposeOnlyBoundedLabelsAndStateCounts(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})

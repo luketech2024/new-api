@@ -90,6 +90,10 @@ var EmailLoginAuthServerList = []string{
 var DebugEnabled bool
 var MemoryCacheEnabled bool
 
+// UpstreamRequestLogEnabled records outbound request metadata and bodies for troubleshooting.
+// It is disabled by default because request bodies can contain user content.
+var UpstreamRequestLogEnabled bool
+
 var LogConsumeEnabled = true
 
 var TLSInsecureSkipVerify bool

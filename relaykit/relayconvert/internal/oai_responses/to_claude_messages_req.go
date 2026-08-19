@@ -12,6 +12,12 @@ import (
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 )
 
+const (
+	webSearchMaxUsesLow    = 1
+	webSearchMaxUsesMedium = 5
+	webSearchMaxUsesHigh   = 10
+)
+
 func convertOpenAIResponsesRequestToClaudeMessages(c context.Context, info convmeta.Meta, request any) (any, error) {
 	responsesRequest, err := OpenAIResponsesRequestFromAny(request)
 	if err != nil {
@@ -47,12 +53,16 @@ func OpenAIResponsesRequestToClaudeMessages(c context.Context, info convmeta.Met
 		}
 	}
 
-	functions, err := RequestFunctionDeclarations(req.Tools)
+	functions, webSearchTool, err := RequestToolsForClaude(req.Tools)
 	if err != nil {
 		return nil, err
 	}
-	if len(functions) > 0 {
-		claudeRequest.Tools = responsesFunctionDeclarationsToClaudeTools(functions)
+	tools := responsesFunctionDeclarationsToClaudeTools(functions)
+	if webSearchTool != nil {
+		tools = append(tools, webSearchTool)
+	}
+	if len(tools) > 0 {
+		claudeRequest.Tools = tools
 	}
 
 	toolChoice, err := RequestToolChoiceToChat(req.ToolChoice)
@@ -126,6 +136,75 @@ func OpenAIResponsesRequestToClaudeMessages(c context.Context, info convmeta.Met
 		return nil, sharedclaude.ErrMissingMaxTokens
 	}
 	return claudeRequest, nil
+}
+
+func RequestToolsForClaude(raw []byte) ([]dto.FunctionRequest, *dto.ClaudeWebSearchTool, error) {
+	functions, err := RequestFunctionDeclarations(raw)
+	if err != nil || !RawJSONPresent(raw) {
+		return functions, nil, err
+	}
+
+	var tools []map[string]any
+	if err := kitutil.Unmarshal(raw, &tools); err != nil {
+		return nil, nil, fmt.Errorf("invalid tools: %w", err)
+	}
+	for _, tool := range tools {
+		toolType := strings.TrimSpace(kitutil.Interface2String(tool["type"]))
+		if toolType != dto.BuildInToolWebSearch && toolType != dto.BuildInToolWebSearchPreview {
+			continue
+		}
+
+		webSearchTool := &dto.ClaudeWebSearchTool{
+			Type: "web_search_20250305",
+			Name: "web_search",
+		}
+		switch strings.TrimSpace(kitutil.Interface2String(tool["search_context_size"])) {
+		case "low":
+			webSearchTool.MaxUses = webSearchMaxUsesLow
+		case "medium":
+			webSearchTool.MaxUses = webSearchMaxUsesMedium
+		case "high":
+			webSearchTool.MaxUses = webSearchMaxUsesHigh
+		}
+		if domains, ok := tool["allowed_domains"].([]any); ok {
+			for _, domain := range domains {
+				if value := strings.TrimSpace(kitutil.Interface2String(domain)); value != "" {
+					webSearchTool.AllowedDomains = append(webSearchTool.AllowedDomains, value)
+				}
+			}
+		}
+		if domains, ok := tool["blocked_domains"].([]any); ok {
+			for _, domain := range domains {
+				if value := strings.TrimSpace(kitutil.Interface2String(domain)); value != "" {
+					webSearchTool.BlockedDomains = append(webSearchTool.BlockedDomains, value)
+				}
+			}
+		}
+		if filters, ok := tool["filters"].(map[string]any); ok {
+			if domains, ok := filters["allowed_domains"].([]any); ok {
+				for _, domain := range domains {
+					if value := strings.TrimSpace(kitutil.Interface2String(domain)); value != "" {
+						webSearchTool.AllowedDomains = append(webSearchTool.AllowedDomains, value)
+					}
+				}
+			}
+		}
+		if location, ok := tool["user_location"].(map[string]any); ok {
+			approximate, _ := location["approximate"].(map[string]any)
+			if approximate == nil {
+				approximate = location
+			}
+			webSearchTool.UserLocation = &dto.ClaudeWebSearchUserLocation{
+				Type:     "approximate",
+				Timezone: kitutil.Interface2String(approximate["timezone"]),
+				Country:  kitutil.Interface2String(approximate["country"]),
+				Region:   kitutil.Interface2String(approximate["region"]),
+				City:     kitutil.Interface2String(approximate["city"]),
+			}
+		}
+		return functions, webSearchTool, nil
+	}
+	return functions, nil, nil
 }
 
 func responsesFunctionDeclarationsToClaudeTools(functions []dto.FunctionRequest) []any {

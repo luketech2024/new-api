@@ -68,5 +68,11 @@ export function buildChatCompletionPayload(
     payload.seed = config.seed
   }
 
+  if (config.webSearchEnabled) {
+    payload.web_search_options = {
+      search_context_size: 'medium',
+    }
+  }
+
   return payload
 }

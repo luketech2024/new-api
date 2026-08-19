@@ -38,11 +38,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 
-import {
-  ATTACHMENT_ACTIONS,
-  getAttachmentActionNotice,
-  getSearchActionNotice,
-} from '../../lib'
+import { ATTACHMENT_ACTIONS, getAttachmentActionNotice } from '../../lib'
 import type { ParameterEnabled, PlaygroundConfig } from '../../types'
 import { PlaygroundParameterPanel } from './playground-parameter-panel'
 
@@ -79,11 +75,6 @@ export function PlaygroundInputTools({
     toast.info(t(notice.title), {
       description: notice.description,
     })
-  }
-
-  const handleSearchAction = () => {
-    const notice = getSearchActionNotice()
-    toast.info(t(notice.title))
   }
 
   const handleClearMessages = () => {
@@ -135,9 +126,13 @@ export function PlaygroundInputTools({
             render={
               <PromptInputButton
                 aria-label={t('Search')}
-                className='text-muted-foreground hover:text-foreground hover:bg-muted/70 font-medium'
+                aria-pressed={config.webSearchEnabled}
+                className='text-muted-foreground hover:text-foreground hover:bg-muted/70 data-[pressed=true]:bg-primary/15 data-[pressed=true]:text-primary font-medium'
                 disabled={disabled}
-                onClick={handleSearchAction}
+                onClick={() =>
+                  onConfigChange('webSearchEnabled', !config.webSearchEnabled)
+                }
+                data-pressed={config.webSearchEnabled}
                 variant='ghost'
               >
                 <GlobeIcon size={16} />

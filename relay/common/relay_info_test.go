@@ -157,6 +157,23 @@ func TestGenRelayInfoCapturesRequestReasoningEffort(t *testing.T) {
 	}
 }
 
+func TestGenRelayInfoResponsesRecordsWebSearchTool(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest("POST", "/v1/responses", nil)
+	request := &dto.OpenAIResponsesRequest{
+		Model: "gpt-test",
+		Tools: json.RawMessage([]byte("[{\"type\":\"web_search\",\"search_context_size\":\"high\"}]")),
+	}
+
+	info := GenRelayInfoResponses(ctx, request)
+
+	require.NotNil(t, info.ResponsesUsageInfo)
+	webSearch, ok := info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolWebSearch]
+	require.True(t, ok)
+	assert.Equal(t, "high", webSearch.SearchContextSize)
+}
+
 func TestInitChannelMetaRestoresRequestReasoningEffortForRetry(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())

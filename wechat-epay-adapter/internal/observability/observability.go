@@ -2,9 +2,11 @@ package observability
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -35,16 +37,81 @@ type Logger struct {
 	logger *slog.Logger
 }
 
+const maxLogCount = 1000000
+
+type dailyLogWriter struct {
+	dir      string
+	now      func() time.Time
+	mu       sync.Mutex
+	date     string
+	sequence int
+	count    int
+	file     *os.File
+}
+
 func NewMetrics(database *store.Store) *Metrics {
 	return &Metrics{store: database, requests: make(map[requestMetricKey]requestMetric)}
 }
 
-func NewLogger(level string) *Logger {
+func NewLogger(level, logDir string) (*Logger, error) {
 	parsed := new(slog.LevelVar)
 	if err := parsed.UnmarshalText([]byte(level)); err != nil {
 		parsed.Set(slog.LevelInfo)
 	}
-	return &Logger{logger: slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: parsed}))}
+	writer := &dailyLogWriter{dir: logDir, now: time.Now}
+	writer.mu.Lock()
+	err := writer.rotateLocked(false)
+	writer.mu.Unlock()
+	if err != nil {
+		return nil, fmt.Errorf("initialize adapter log file: %w", err)
+	}
+	return &Logger{logger: slog.New(slog.NewJSONHandler(io.MultiWriter(os.Stdout, writer), &slog.HandlerOptions{Level: parsed}))}, nil
+}
+
+func (w *dailyLogWriter) Write(data []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if err := w.rotateLocked(w.count >= maxLogCount); err != nil {
+		return 0, err
+	}
+	n, err := w.file.Write(data)
+	if err == nil {
+		w.count++
+	}
+	return n, err
+}
+
+func (w *dailyLogWriter) rotateLocked(forceNextFile bool) error {
+	date := w.now().Format("20060102")
+	if w.file != nil && w.date == date && !forceNextFile {
+		return nil
+	}
+	if w.date != date {
+		w.sequence = 0
+		w.count = 0
+	} else if forceNextFile {
+		w.sequence++
+		w.count = 0
+	}
+	logDir := filepath.Join(w.dir, date)
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		return err
+	}
+	name := "wechat-epay.log"
+	if w.sequence > 0 {
+		name = fmt.Sprintf("wechat-epay-%d.log", w.sequence)
+	}
+	file, err := os.OpenFile(filepath.Join(logDir, name), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	previous := w.file
+	w.file = file
+	w.date = date
+	if previous != nil {
+		return previous.Close()
+	}
+	return nil
 }
 
 func (m *Metrics) ObserveRequest(route, method string, status int, duration time.Duration) {

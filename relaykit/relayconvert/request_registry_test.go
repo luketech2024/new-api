@@ -575,6 +575,49 @@ func TestConvertRequestResponsesToClaudeUsesDirectConverter(t *testing.T) {
 	assert.Equal(t, map[string]any{"ok": true}, toolResultParts[0].Content)
 }
 
+func TestConvertRequestResponsesToClaudeMapsWebSearchTool(t *testing.T) {
+	maxOutputTokens := uint(256)
+	req := &dto.OpenAIResponsesRequest{
+		Model:           "claude-test",
+		MaxOutputTokens: &maxOutputTokens,
+		Input: mustRawMessage(t, []map[string]any{{
+			"role":    "user",
+			"content": "latest news",
+		}}),
+		Tools: mustRawMessage(t, []map[string]any{{
+			"type":                "web_search",
+			"search_context_size": "medium",
+			"allowed_domains":     []string{"example.com"},
+			"blocked_domains":     []string{"blocked.example"},
+			"user_location": map[string]any{
+				"type":     "approximate",
+				"country":  "US",
+				"city":     "Seattle",
+				"timezone": "America/Los_Angeles",
+			},
+		}}),
+	}
+
+	result, err := ConvertRequest(nil, &convmeta.Values{}, types.RelayFormatClaude, req)
+
+	require.NoError(t, err)
+	claudeReq, ok := result.Value.(*dto.ClaudeRequest)
+	require.True(t, ok)
+	claudeTools, ok := claudeReq.Tools.([]any)
+	require.True(t, ok)
+	tools, webSearchTools := dto.ProcessTools(claudeTools)
+	assert.Empty(t, tools)
+	require.Len(t, webSearchTools, 1)
+	assert.Equal(t, "web_search_20250305", webSearchTools[0].Type)
+	assert.Equal(t, "web_search", webSearchTools[0].Name)
+	assert.Equal(t, 5, webSearchTools[0].MaxUses)
+	assert.Equal(t, []string{"example.com"}, webSearchTools[0].AllowedDomains)
+	assert.Equal(t, []string{"blocked.example"}, webSearchTools[0].BlockedDomains)
+	require.NotNil(t, webSearchTools[0].UserLocation)
+	assert.Equal(t, "US", webSearchTools[0].UserLocation.Country)
+	assert.Equal(t, "Seattle", webSearchTools[0].UserLocation.City)
+}
+
 func TestConvertRequestViaResponsesToGeminiStillUsesDirectSteps(t *testing.T) {
 	info := &convmeta.Values{
 		ConversionChain:     []types.RelayFormat{types.RelayFormatOpenAIResponses},

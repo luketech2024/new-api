@@ -182,10 +182,12 @@ type InputSchema struct {
 }
 
 type ClaudeWebSearchTool struct {
-	Type         string                       `json:"type"`
-	Name         string                       `json:"name"`
-	MaxUses      int                          `json:"max_uses,omitempty"`
-	UserLocation *ClaudeWebSearchUserLocation `json:"user_location,omitempty"`
+	Type           string                       `json:"type"`
+	Name           string                       `json:"name"`
+	MaxUses        int                          `json:"max_uses,omitempty"`
+	UserLocation   *ClaudeWebSearchUserLocation `json:"user_location,omitempty"`
+	AllowedDomains []string                     `json:"allowed_domains,omitempty"`
+	BlockedDomains []string                     `json:"blocked_domains,omitempty"`
 }
 
 type ClaudeWebSearchUserLocation struct {

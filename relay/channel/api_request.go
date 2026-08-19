@@ -48,6 +48,54 @@ func ApplyUpstreamBodyMetadata(req *http.Request, body io.Reader) {
 	}
 }
 
+func logUpstreamRequest(c *gin.Context, req *http.Request) {
+	if !common2.UpstreamRequestLogEnabled || req == nil {
+		return
+	}
+
+	headers := req.Header.Clone()
+	for name := range headers {
+		if isSensitiveLogHeader(name) {
+			headers[name] = []string{"[REDACTED]"}
+		}
+	}
+
+	body := "[unavailable: request body is not replayable]"
+	if req.GetBody != nil {
+		reader, err := req.GetBody()
+		if err != nil {
+			body = fmt.Sprintf("[unavailable: %v]", err)
+		} else {
+			data, readErr := io.ReadAll(reader)
+			closeErr := reader.Close()
+			if readErr != nil {
+				body = fmt.Sprintf("[unavailable: %v]", readErr)
+			} else if closeErr != nil {
+				body = fmt.Sprintf("[unavailable: %v]", closeErr)
+			} else {
+				body = common2.LocalLogPreview(string(data))
+			}
+		}
+	}
+
+	logger.LogInfo(c, fmt.Sprintf(
+		"upstream request: method=%s url=%s headers=%v body=%s",
+		req.Method,
+		common.SanitizeURLForLog(req.URL.String()),
+		headers,
+		body,
+	))
+}
+
+func isSensitiveLogHeader(name string) bool {
+	switch strings.ToLower(name) {
+	case "authorization", "cookie", "set-cookie", "x-api-key", "x-goog-api-key", "api-key", "proxy-authorization":
+		return true
+	default:
+		return false
+	}
+}
+
 func SetupApiRequestHeader(info *common.RelayInfo, c *gin.Context, req *http.Header) {
 	if info.RelayMode == constant.RelayModeAudioTranscription || info.RelayMode == constant.RelayModeAudioTranslation {
 		// multipart/form-data
@@ -333,6 +381,7 @@ func DoApiRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 		return nil, err
 	}
 	applyHeaderOverrideToRequest(req, headerOverride)
+	logUpstreamRequest(c, req)
 	resp, err := doRequest(c, req, info)
 	if err != nil {
 		return nil, fmt.Errorf("do request failed: %w", err)
@@ -365,6 +414,7 @@ func DoFormRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBod
 		return nil, err
 	}
 	applyHeaderOverrideToRequest(req, headerOverride)
+	logUpstreamRequest(c, req)
 	resp, err := doRequest(c, req, info)
 	if err != nil {
 		return nil, fmt.Errorf("do request failed: %w", err)
@@ -581,6 +631,7 @@ func DoTaskApiRequest(a TaskAdaptor, c *gin.Context, info *common.RelayInfo, req
 	if err != nil {
 		return nil, fmt.Errorf("setup request header failed: %w", err)
 	}
+	logUpstreamRequest(c, req)
 	resp, err := doRequest(c, req, info)
 	if err != nil {
 		return nil, fmt.Errorf("do request failed: %w", err)

@@ -42,6 +42,7 @@ type Config struct {
 	TrustedProxyCIDRs           []string
 	NotificationWorkers         int
 	LogLevel                    string
+	LogDir                      string
 }
 
 func Load() (Config, error) {
@@ -76,6 +77,7 @@ func Load() (Config, error) {
 		TrustedProxyCIDRs:           optionalCSV("TRUSTED_PROXY_CIDRS"),
 		NotificationWorkers:         workers,
 		LogLevel:                    optional("LOG_LEVEL", "info"),
+		LogDir:                      optional("LOG_DIR", "./logs"),
 	}
 	if err := config.Validate(); err != nil {
 		return Config{}, err

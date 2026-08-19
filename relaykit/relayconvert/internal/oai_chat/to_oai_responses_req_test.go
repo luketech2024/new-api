@@ -161,6 +161,20 @@ func TestChatCompletionsRequestToResponsesRequestPreservesPenalties(t *testing.T
 	}
 }
 
+func TestChatCompletionsRequestToResponsesRequestMapsWebSearch(t *testing.T) {
+	got, err := ChatCompletionsRequestToResponsesRequest(&dto.GeneralOpenAIRequest{
+		Model:    "gpt-test",
+		Messages: []dto.Message{{Role: "user", Content: "latest news"}},
+		WebSearchOptions: &dto.WebSearchOptions{
+			SearchContextSize: "medium",
+		},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "web_search", gjson.GetBytes(got.Tools, "0.type").String())
+	assert.Equal(t, "medium", gjson.GetBytes(got.Tools, "0.search_context_size").String())
+}
+
 func assistantMessageWithTool(content string, id string, name string, args string) dto.Message {
 	msg := dto.Message{Role: "assistant", Content: content}
 	msg.SetToolCalls([]dto.ToolCallRequest{

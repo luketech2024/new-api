@@ -47,7 +47,10 @@ func run() error {
 	}
 	databaseStore := store.New(db)
 	metrics := observability.NewMetrics(databaseStore)
-	logger := observability.NewLogger(appConfig.LogLevel)
+	logger, err := observability.NewLogger(appConfig.LogLevel, appConfig.LogDir)
+	if err != nil {
+		return err
+	}
 	router := httpserver.New(db, httpserver.SecurityOptions{TrustedProxies: appConfig.TrustedProxyCIDRs, RequestObserver: metrics, RequestLogger: logger})
 	if err := httpserver.RegisterSubmitRoute(router, databaseStore, appConfig, wechatClient); err != nil {
 		return err

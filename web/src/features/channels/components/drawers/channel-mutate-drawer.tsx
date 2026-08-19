@@ -4422,6 +4422,33 @@ export function ChannelMutateDrawer({
                                   currentType
                                 ) && (
                                   <>
+                                    {currentType === 1 && (
+                                      <FormField
+                                        control={form.control}
+                                        name='openai_responses_web_search_enabled'
+                                        render={({ field }) => (
+                                          <FormItem className='flex items-center justify-between gap-3 px-4 py-3'>
+                                            <div className='space-y-0.5'>
+                                              <FormLabel className='text-sm'>
+                                                {t('Web search')}
+                                              </FormLabel>
+                                              <FormDescription>
+                                                {t(
+                                                  'Search the public web at inference time'
+                                                )}
+                                              </FormDescription>
+                                            </div>
+                                            <FormControl>
+                                              <Switch
+                                                checked={field.value}
+                                                onCheckedChange={field.onChange}
+                                              />
+                                            </FormControl>
+                                          </FormItem>
+                                        )}
+                                      />
+                                    )}
+
                                     <FormField
                                       control={form.control}
                                       name='disable_store'

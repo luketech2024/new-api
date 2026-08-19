@@ -1,19 +1,21 @@
 package logger
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
-	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
 )
 
@@ -22,16 +24,43 @@ const (
 	loggerWarn  = "WARN"
 	loggerError = "ERR"
 	loggerDebug = "DEBUG"
+	maxLogCount = 400
 )
 
-const maxLogCount = 1000000
-
-var logCount int
 var setupLogLock sync.Mutex
-var setupLogWorking bool
 var currentLogPath string
 var currentLogPathMu sync.RWMutex
 var currentLogFile *os.File
+var currentLogDate string
+var currentLogSequence int
+var currentLogCount int
+var logFileWriter = &rotatingLogWriter{}
+
+type rotatingLogWriter struct{}
+
+func (*rotatingLogWriter) Write(data []byte) (int, error) {
+	return writeLogAt(time.Now(), data)
+}
+
+func writeLogAt(now time.Time, data []byte) (int, error) {
+	setupLogLock.Lock()
+	defer setupLogLock.Unlock()
+	if currentLogCount >= maxLogCount {
+		if err := setupLoggerAtLocked(now, true); err != nil {
+			return 0, err
+		}
+	} else if err := setupLoggerAtLocked(now, false); err != nil {
+		return 0, err
+	}
+	if currentLogFile == nil {
+		return len(data), nil
+	}
+	n, err := currentLogFile.Write(data)
+	if err == nil {
+		currentLogCount += strings.Count(string(data), "\n")
+	}
+	return n, err
+}
 
 func GetCurrentLogPath() string {
 	currentLogPathMu.RLock()
@@ -40,37 +69,120 @@ func GetCurrentLogPath() string {
 }
 
 func SetupLogger() {
-	defer func() {
-		setupLogWorking = false
-	}()
-	if *common.LogDir != "" {
-		ok := setupLogLock.TryLock()
-		if !ok {
-			log.Println("setup log is already working")
-			return
-		}
-		defer func() {
-			setupLogLock.Unlock()
-		}()
-		logPath := filepath.Join(*common.LogDir, fmt.Sprintf("oneapi-%s.log", time.Now().Format("20060102150405")))
-		fd, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			log.Fatal("failed to open log file")
-		}
-		currentLogPathMu.Lock()
-		oldFile := currentLogFile
-		currentLogPath = logPath
-		currentLogFile = fd
-		currentLogPathMu.Unlock()
+	setupLoggerAt(time.Now())
+	common.LogWriterMu.Lock()
+	gin.DefaultWriter = io.MultiWriter(os.Stdout, logFileWriter)
+	gin.DefaultErrorWriter = io.MultiWriter(os.Stderr, logFileWriter)
+	common.LogWriterMu.Unlock()
+}
 
-		common.LogWriterMu.Lock()
-		gin.DefaultWriter = io.MultiWriter(os.Stdout, fd)
-		gin.DefaultErrorWriter = io.MultiWriter(os.Stderr, fd)
-		if oldFile != nil {
-			_ = oldFile.Close()
-		}
-		common.LogWriterMu.Unlock()
+func setupLoggerAt(now time.Time) {
+	setupLogLock.Lock()
+	defer setupLogLock.Unlock()
+	if err := setupLoggerAtLocked(now, false); err != nil {
+		log.Printf("failed to open log file: %v", err)
 	}
+}
+
+func setupLoggerAtLocked(now time.Time, forceNextFile bool) error {
+	if *common.LogDir == "" {
+		return nil
+	}
+	date := now.Format("20060102")
+	if currentLogFile != nil && currentLogDate == date && !forceNextFile {
+		return nil
+	}
+	logDir := filepath.Join(*common.LogDir, date)
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return err
+	}
+	if currentLogDate != date {
+		currentLogSequence = latestLogSequence(logDir)
+		currentLogCount = 0
+	} else if forceNextFile {
+		currentLogSequence++
+		currentLogCount = 0
+	}
+
+	logPath := filepath.Join(logDir, logFileName(currentLogSequence))
+	for {
+		count, err := countLogLines(logPath)
+		if err != nil {
+			return err
+		}
+		if count < maxLogCount {
+			currentLogCount = count
+			break
+		}
+		currentLogSequence++
+		logPath = filepath.Join(logDir, logFileName(currentLogSequence))
+	}
+	fd, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	currentLogPathMu.Lock()
+	oldFile := currentLogFile
+	currentLogPath = logPath
+	currentLogFile = fd
+	currentLogDate = date
+	currentLogPathMu.Unlock()
+
+	if oldFile != nil {
+		_ = oldFile.Close()
+	}
+	return nil
+}
+
+func logFileName(sequence int) string {
+	if sequence == 0 {
+		return "oneapi.log"
+	}
+	return fmt.Sprintf("oneapi-%d.log", sequence)
+}
+
+func latestLogSequence(logDir string) int {
+	entries, err := os.ReadDir(logDir)
+	if err != nil {
+		return 0
+	}
+
+	latest := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if name == "oneapi.log" {
+			continue
+		}
+		if !strings.HasPrefix(name, "oneapi-") || !strings.HasSuffix(name, ".log") {
+			continue
+		}
+		sequence, err := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(name, "oneapi-"), ".log"))
+		if err == nil && sequence > latest {
+			latest = sequence
+		}
+	}
+	return latest
+}
+
+func countLogLines(path string) (int, error) {
+	file, err := os.Open(path)
+	if os.IsNotExist(err) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	lines := 0
+	for scanner.Scan() {
+		lines++
+	}
+	return lines, scanner.Err()
 }
 
 func LogInfo(ctx context.Context, msg string) {
@@ -109,14 +221,6 @@ func logHelper(ctx context.Context, level string, msg string) {
 	}
 	_, _ = fmt.Fprintf(writer, "[%s] %v | %s | %s \n", level, now.Format("2006/01/02 - 15:04:05"), id, msg)
 	common.LogWriterMu.RUnlock()
-	logCount++ // we don't need accurate count, so no lock here
-	if logCount > maxLogCount && !setupLogWorking {
-		logCount = 0
-		setupLogWorking = true
-		gopool.Go(func() {
-			SetupLogger()
-		})
-	}
 }
 
 func LogQuota(quota int) string {
