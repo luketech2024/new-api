@@ -56,20 +56,20 @@ services:
   # ----------------------------------------------------------
   # Redis — new-api 缓存 / 限流 / 会话协调
   # ----------------------------------------------------------
-  redis:
-    image: redis:7-alpine
-    container_name: redis
-    restart: unless-stopped
-    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
-    volumes:
-      - redis_data:/data
-    networks:
-      - newapi-net
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+  #redis:
+  #  image: redis:7-alpine
+  #  container_name: redis
+  #  restart: unless-stopped
+  #  command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+  #  volumes:
+  #    - redis_data:/data
+  #  networks:
+  #    - newapi-net
+  #  healthcheck:
+  #    test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+  #    interval: 10s
+  #    timeout: 5s
+  #    retries: 5
 
   # ----------------------------------------------------------
   # New-API — 从项目根目录源码构建
@@ -89,7 +89,7 @@ services:
       - newapi_logs:/app/logs
     environment:
       - SQL_DSN=${NEW_API_DB_USER}:${NEW_API_DB_PASSWORD}@tcp(mysql:3306)/${NEW_API_DB_NAME}?charset=utf8mb4&parseTime=True&loc=Local
-      - REDIS_CONN_STRING=redis://:${REDIS_PASSWORD}@redis:6379
+      #- REDIS_CONN_STRING=redis://:${REDIS_PASSWORD}@redis:6379
       - TZ=Asia/Shanghai
       - ERROR_LOG_ENABLED=true
       - BATCH_UPDATE_ENABLED=true
@@ -102,8 +102,8 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
-      redis:
-        condition: service_healthy
+      #redis:
+      #  condition: service_healthy
     networks:
       - newapi-net
     healthcheck:
@@ -131,6 +131,7 @@ services:
       - DATABASE_TYPE=mysql
       - DATABASE_DSN=${WECHAT_DB_USER}:${WECHAT_DB_PASSWORD}@tcp(mysql:3306)/${WECHAT_DB_NAME}?charset=utf8mb4&parseTime=True&loc=UTC
       - HTTP_LISTEN_ADDR=:8080
+      - LOG_DIR=/tmp/logs
     expose:
       - "8080"
     volumes:
@@ -181,7 +182,7 @@ volumes:
   newapi_data:
   newapi_logs:
   nginx_logs:
-  redis_data:
+  #redis_data:
 
 networks:
   newapi-net:

@@ -1,9 +1,0 @@
-# 敏感文件 — 切勿提交
-.env
-nginx/certs/*
-!nginx/certs/.gitkeep
-nginx/html/*
-!nginx/html/.gitkeep
-wechat-adapter/.env
-wechat-adapter/secrets/*
-!wechat-adapter/secrets/.gitkeep

@@ -1,0 +1,59 @@
+# ============================================
+# Weimeta（唯元智创）— 内部端口 8081
+# ============================================
+server {
+    listen 8081;
+    
+    client_max_body_size 50m;
+    client_body_timeout 600s;
+
+    location /api/v3/contents/generations/tasks {
+        proxy_pass https://api.weimeta.cn/volcengine/v1/contents/generations/tasks;
+        proxy_http_version 1.1;
+        proxy_set_header Host api.weimeta.cn;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header Content-Type $content_type;
+        proxy_read_timeout 600s;
+        proxy_connect_timeout 30s;
+	proxy_send_timeout 600s;
+    }
+
+    location / {
+        proxy_pass https://api.weimeta.cn;
+        proxy_set_header Host api.weimeta.cn;
+        proxy_set_header Authorization $http_authorization;
+	proxy_connect_timeout 30s;
+        proxy_send_timeout 600s;
+        proxy_read_timeout 600s;
+    }
+}
+
+# ============================================
+# TopenRouter — 内部端口 8082
+# ============================================
+server {
+    listen 8082;
+
+    client_max_body_size 50m;
+    client_body_timeout 600s;
+
+    location /api/v3/contents/generations/tasks {
+        proxy_pass https://tp-api.chinadatapay.com:8000/v1/video/tasks;
+        proxy_http_version 1.1;
+        proxy_set_header Host tp-api.chinadatapay.com;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header Content-Type $content_type;
+        proxy_connect_timeout 30s;
+        proxy_send_timeout 600s;
+        proxy_read_timeout 600s;
+    }
+
+    location / {
+        proxy_pass https://tp-api.chinadatapay.com:8000;
+        proxy_set_header Host tp-api.chinadatapay.com;
+        proxy_set_header Authorization $http_authorization;
+	proxy_connect_timeout 30s;
+        proxy_send_timeout 600s;
+        proxy_read_timeout 600s;
+    }
+}
