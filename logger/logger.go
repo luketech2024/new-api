@@ -24,7 +24,7 @@ const (
 	loggerWarn  = "WARN"
 	loggerError = "ERR"
 	loggerDebug = "DEBUG"
-	maxLogCount = 400
+	maxLogCount = 1000000
 )
 
 var setupLogLock sync.Mutex
