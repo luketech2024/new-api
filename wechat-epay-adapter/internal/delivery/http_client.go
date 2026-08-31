@@ -3,10 +3,12 @@ package delivery
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
-	"net/url"
 	"time"
+
+	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/order"
 )
 
 type DestinationValidator func(context.Context, string) error
@@ -82,14 +84,15 @@ func isPublicIP(ip net.IP) bool {
 	return true
 }
 
-func ValidateExactDestination(expected string) DestinationValidator {
+// ValidateAllowlistedDestination keeps the transport guard aligned with the configured
+// notify allowlist, so neither a stale stored URL nor a redirect can divert a callback.
+func ValidateAllowlistedDestination(policy *order.NotifyURLPolicy) DestinationValidator {
 	return func(_ context.Context, raw string) error {
-		candidate, err := url.Parse(raw)
-		if err != nil {
-			return err
+		if policy == nil {
+			return errors.New("notify URL policy is required")
 		}
-		if candidate.String() != expected {
-			return errors.New("destination does not match configured notify URL")
+		if _, err := policy.Canonical(raw); err != nil {
+			return fmt.Errorf("destination is not an allowlisted notify URL: %w", err)
 		}
 		return nil
 	}

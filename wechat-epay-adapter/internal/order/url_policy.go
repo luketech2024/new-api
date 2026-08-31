@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/url"
 	"path"
+	"slices"
 	"strings"
 )
 
@@ -100,10 +101,42 @@ func NormalizeHTTPSURL(raw string) (*url.URL, error) {
 	return parsed, nil
 }
 
-func NotifyURLMatches(candidate, expected string) bool {
-	candidateURL, candidateErr := NormalizeHTTPSURL(candidate)
-	expectedURL, expectedErr := NormalizeHTTPSURL(expected)
-	return candidateErr == nil && expectedErr == nil && candidateURL.String() == expectedURL.String()
+// NotifyURLPolicy allowlists the new-api callback destinations. new-api registers
+// a separate callback path per business flow (wallet top-up and subscription
+// purchase), so the adapter must accept and later honor more than one destination.
+type NotifyURLPolicy struct {
+	allowed []string
+}
+
+func NewNotifyURLPolicy(allowlist []string) (*NotifyURLPolicy, error) {
+	policy := &NotifyURLPolicy{}
+	for _, entry := range allowlist {
+		normalized, err := NormalizeHTTPSURL(strings.TrimSpace(entry))
+		if err != nil {
+			return nil, fmt.Errorf("invalid notify URL allowlist entry: %w", err)
+		}
+		if canonical := normalized.String(); !slices.Contains(policy.allowed, canonical) {
+			policy.allowed = append(policy.allowed, canonical)
+		}
+	}
+	if len(policy.allowed) == 0 {
+		return nil, errors.New("notify URL allowlist is empty")
+	}
+	return policy, nil
+}
+
+// Canonical returns the allowlisted spelling of candidate so the URL persisted with
+// an order and the destination used for its callback always compare equal.
+func (p *NotifyURLPolicy) Canonical(candidate string) (string, error) {
+	normalized, err := NormalizeHTTPSURL(candidate)
+	if err != nil {
+		return "", err
+	}
+	canonical := normalized.String()
+	if !slices.Contains(p.allowed, canonical) {
+		return "", errors.New("notify URL is not allowlisted")
+	}
+	return canonical, nil
 }
 
 func ValidatePublicDestination(ctx context.Context, raw string, resolver Resolver) (*url.URL, error) {

@@ -23,7 +23,7 @@ type Config struct {
 	PublicBaseURL               string
 	EpayPartnerID               string
 	EpayKey                     string
-	NewAPINotifyURL             string
+	NewAPINotifyURLs            []string
 	ReturnURLAllowlist          string
 	MaxOrderAmountYuan          string
 	WechatAppID                 string
@@ -58,7 +58,7 @@ func Load() (Config, error) {
 		PublicBaseURL:               required("PUBLIC_BASE_URL"),
 		EpayPartnerID:               required("EPAY_PARTNER_ID"),
 		EpayKey:                     required("EPAY_KEY"),
-		NewAPINotifyURL:             required("NEW_API_NOTIFY_URL"),
+		NewAPINotifyURLs:            optionalCSV("NEW_API_NOTIFY_URL"),
 		ReturnURLAllowlist:          required("RETURN_URL_ALLOWLIST"),
 		MaxOrderAmountYuan:          required("MAX_ORDER_AMOUNT_YUAN"),
 		WechatAppID:                 required("WECHAT_APP_ID"),
@@ -104,11 +104,20 @@ func (c Config) Validate() error {
 		return fmt.Errorf("DATABASE_TYPE must be sqlite, mysql, or postgres")
 	}
 	for name, value := range map[string]string{
-		"PUBLIC_BASE_URL":    c.PublicBaseURL,
-		"NEW_API_NOTIFY_URL": c.NewAPINotifyURL,
-		"WECHAT_NOTIFY_URL":  c.WechatNotifyURL,
+		"PUBLIC_BASE_URL":   c.PublicBaseURL,
+		"WECHAT_NOTIFY_URL": c.WechatNotifyURL,
 	} {
 		if err := requireHTTPSURL(name, value); err != nil {
+			return err
+		}
+	}
+	// new-api registers one callback path per business flow (wallet top-up and
+	// subscription purchase), so the allowlist has to carry several destinations.
+	if len(c.NewAPINotifyURLs) == 0 {
+		return errors.New("NEW_API_NOTIFY_URL is required")
+	}
+	for _, notifyURL := range c.NewAPINotifyURLs {
+		if err := requireHTTPSURL("NEW_API_NOTIFY_URL", notifyURL); err != nil {
 			return err
 		}
 	}
@@ -163,11 +172,13 @@ func optional(name, fallback string) string {
 }
 
 func optionalCSV(name string) []string {
-	value := strings.TrimSpace(os.Getenv(name))
-	if value == "" {
-		return nil
+	var entries []string
+	for _, entry := range strings.Split(os.Getenv(name), ",") {
+		if trimmed := strings.TrimSpace(entry); trimmed != "" {
+			entries = append(entries, trimmed)
+		}
 	}
-	return strings.Split(value, ",")
+	return entries
 }
 
 func optionalPositiveInt(name string, fallback int) (int, error) {

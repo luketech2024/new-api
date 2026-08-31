@@ -45,6 +45,10 @@ func RegisterSubmitRoute(router *gin.Engine, database *store.Store, appConfig co
 	if err != nil {
 		return err
 	}
+	notifyPolicy, err := order.NewNotifyURLPolicy(appConfig.NewAPINotifyURLs)
+	if err != nil {
+		return err
+	}
 	cashier := NewCashierHandler(database, policy)
 	router.GET("/cashier/:access_token", cashier.Show)
 	router.GET("/api/v1/cashier/:access_token/status", cashier.Status)
@@ -53,7 +57,7 @@ func RegisterSubmitRoute(router *gin.Engine, database *store.Store, appConfig co
 	adminRoutes.GET("/orders/:out_trade_no", adminHandler.GetOrder)
 	adminRoutes.POST("/orders/:out_trade_no/retry-notification", adminHandler.RetryNotification)
 	if len(wechatClients) == 0 || wechatClients[0] == nil {
-		router.POST(RouteSubmit, NewSubmitHandler(database, appConfig, policy).Handle)
+		router.POST(RouteSubmit, NewSubmitHandler(database, appConfig, policy, notifyPolicy).Handle)
 		return nil
 	}
 	verifier, ok := wechatClients[0].(wechat.NotificationVerifier)
@@ -62,6 +66,6 @@ func RegisterSubmitRoute(router *gin.Engine, database *store.Store, appConfig co
 	}
 	router.POST(RouteWechatNotification, NewWechatNotificationHandler(database, verifier, appConfig).Handle)
 	nativeOrders := order.NewNativeOrderService(database, wechatClients[0])
-	router.POST(RouteSubmit, NewSubmitHandler(database, appConfig, policy, nativeOrders).Handle)
+	router.POST(RouteSubmit, NewSubmitHandler(database, appConfig, policy, notifyPolicy, nativeOrders).Handle)
 	return nil
 }

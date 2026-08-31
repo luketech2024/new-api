@@ -492,6 +492,16 @@ func (s *Store) RescheduleNotificationTask(task ClaimedNotificationTask, now tim
 	})
 }
 
+// NotifyDestination returns the new-api callback URL captured when the order was
+// created, so each business flow is notified on the path it submitted the order with.
+func (s *Store) NotifyDestination(orderID string) (string, error) {
+	var paymentOrder PaymentOrder
+	if err := s.db.Select("notify_url").First(&paymentOrder, "id = ?", orderID).Error; err != nil {
+		return "", err
+	}
+	return paymentOrder.NotifyURL, nil
+}
+
 func (s *Store) UpdateNativeOrder(record order.NativeOrderRecord, update order.NativeOrderUpdate) (bool, error) {
 	if err := order.ValidateTransition(record.Status, update.Status); err != nil {
 		return false, err

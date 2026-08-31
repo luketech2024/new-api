@@ -12,6 +12,7 @@ import (
 
 	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/config"
 	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/epay"
+	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/order"
 	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/store"
 )
 
@@ -21,23 +22,27 @@ const (
 )
 
 type Worker struct {
-	store     *store.Store
-	client    *http.Client
-	notifyURL string
-	partnerID string
-	key       string
-	workerID  string
-	now       func() time.Time
+	store           *store.Store
+	client          *http.Client
+	notifyURLPolicy *order.NotifyURLPolicy
+	partnerID       string
+	key             string
+	workerID        string
+	now             func() time.Time
 }
 
-func NewWorker(database *store.Store, appConfig config.Config, workerID string, client *http.Client) *Worker {
+func NewWorker(database *store.Store, appConfig config.Config, workerID string, client *http.Client) (*Worker, error) {
+	notifyURLPolicy, err := order.NewNotifyURLPolicy(appConfig.NewAPINotifyURLs)
+	if err != nil {
+		return nil, err
+	}
 	if client == nil {
-		client = NewHTTPClient(ValidateExactDestination(appConfig.NewAPINotifyURL))
+		client = NewHTTPClient(ValidateAllowlistedDestination(notifyURLPolicy))
 	}
 	return &Worker{
-		store: database, client: client, notifyURL: appConfig.NewAPINotifyURL, partnerID: appConfig.EpayPartnerID,
+		store: database, client: client, notifyURLPolicy: notifyURLPolicy, partnerID: appConfig.EpayPartnerID,
 		key: appConfig.EpayKey, workerID: workerID, now: func() time.Time { return time.Now().UTC() },
-	}
+	}, nil
 }
 
 // Run polls durable tasks until the application context is canceled.
@@ -74,6 +79,14 @@ func (w *Worker) ProcessOne(ctx context.Context) error {
 	if payload.PartnerID != w.partnerID || payload.PaymentType != epay.PaymentTypeWechat {
 		return w.fail(task, nil, "notification payload does not match configured merchant")
 	}
+	storedDestination, err := w.store.NotifyDestination(task.OrderID)
+	if err != nil {
+		return w.fail(task, nil, "cannot load the notification destination of the order")
+	}
+	destination, err := w.notifyURLPolicy.Canonical(storedDestination)
+	if err != nil {
+		return w.fail(task, nil, "order notification destination is no longer allowlisted")
+	}
 	params["sign"] = epay.Sign(params, w.key)
 	requestContext, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -81,7 +94,7 @@ func (w *Worker) ProcessOne(ctx context.Context) error {
 	for key, value := range params {
 		form.Set(key, value)
 	}
-	request, err := http.NewRequestWithContext(requestContext, http.MethodPost, w.notifyURL, bytes.NewBufferString(form.Encode()))
+	request, err := http.NewRequestWithContext(requestContext, http.MethodPost, destination, bytes.NewBufferString(form.Encode()))
 	if err != nil {
 		return w.fail(task, nil, "cannot construct notification request")
 	}

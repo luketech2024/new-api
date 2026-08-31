@@ -129,7 +129,7 @@ nano wechat-adapter/.env
 | 变量 | 来源 |
 |------|------|
 | `PUBLIC_BASE_URL` | `https://pay.example.com` |
-| `NEW_API_NOTIFY_URL` | `https://api.example.com/api/user/epay/notify` |
+| `NEW_API_NOTIFY_URL` | 逗号分隔，钱包充值 `https://api.example.com/api/user/epay/notify` 与订阅购买 `https://api.example.com/api/subscription/epay/notify` 需同时列出 |
 | `WECHAT_NOTIFY_URL` | `https://pay.example.com/api/v1/wechat/notify` |
 | `EPAY_PARTNER_ID` / `EPAY_KEY` | 自己定义（new-api 后台支付设置需一致） |
 | `WECHAT_APP_ID` / `WECHAT_MCH_ID` | [微信商户平台](https://pay.weixin.qq.com) → 账户中心 → 商户信息 |

@@ -21,17 +21,17 @@ type SubmitHandler struct {
 	store           *store.Store
 	partnerID       string
 	key             string
-	notifyURL       string
+	notifyURLPolicy *order.NotifyURLPolicy
 	wechatNotifyURL string
 	maximumAmount   string
 	returnURLPolicy *order.ReturnURLPolicy
 	nativeOrders    *order.NativeOrderService
 }
 
-func NewSubmitHandler(store *store.Store, appConfig config.Config, returnURLPolicy *order.ReturnURLPolicy, nativeOrders ...*order.NativeOrderService) *SubmitHandler {
+func NewSubmitHandler(store *store.Store, appConfig config.Config, returnURLPolicy *order.ReturnURLPolicy, notifyURLPolicy *order.NotifyURLPolicy, nativeOrders ...*order.NativeOrderService) *SubmitHandler {
 	handler := &SubmitHandler{
 		store: store, partnerID: appConfig.EpayPartnerID, key: appConfig.EpayKey,
-		notifyURL: appConfig.NewAPINotifyURL, wechatNotifyURL: appConfig.WechatNotifyURL,
+		notifyURLPolicy: notifyURLPolicy, wechatNotifyURL: appConfig.WechatNotifyURL,
 		maximumAmount: appConfig.MaxOrderAmountYuan, returnURLPolicy: returnURLPolicy,
 	}
 	if len(nativeOrders) > 0 {
@@ -71,7 +71,12 @@ func (handler *SubmitHandler) Handle(context *gin.Context) {
 		return
 	}
 	amountFen, amountText, err := order.ParseAmountFen(request.Money, handler.maximumAmount)
-	if err != nil || !order.NotifyURLMatches(request.NotifyURL, handler.notifyURL) {
+	if err != nil {
+		AbortErrorPage(context, http.StatusBadRequest)
+		return
+	}
+	notifyURL, err := handler.notifyURLPolicy.Canonical(request.NotifyURL)
+	if err != nil {
 		AbortErrorPage(context, http.StatusBadRequest)
 		return
 	}
@@ -80,7 +85,7 @@ func (handler *SubmitHandler) Handle(context *gin.Context) {
 		AbortErrorPage(context, http.StatusBadRequest)
 		return
 	}
-	fingerprint := order.Fingerprint(request.PartnerID, request.PaymentType, request.MerchantOrder, request.Subject, amountText, request.NotifyURL, returnURL.String())
+	fingerprint := order.Fingerprint(request.PartnerID, request.PaymentType, request.MerchantOrder, request.Subject, amountText, notifyURL, returnURL.String())
 	requestID, _ := context.Get(RequestIDHeader)
 
 	token, err := newCashierToken()
@@ -91,7 +96,7 @@ func (handler *SubmitHandler) Handle(context *gin.Context) {
 	result, err := handler.store.CreatePaymentOrder(store.CreatePaymentOrderInput{
 		ID: uuid.NewString(), OutTradeNo: request.MerchantOrder, GatewayTradeNo: "GW" + strings.ReplaceAll(uuid.NewString(), "-", ""),
 		RequestFingerprint: fingerprint, EpayPID: request.PartnerID, PaymentType: request.PaymentType, Subject: request.Subject,
-		AmountText: amountText, AmountFen: amountFen, NotifyURL: request.NotifyURL, ReturnURL: returnURL.String(),
+		AmountText: amountText, AmountFen: amountFen, NotifyURL: notifyURL, ReturnURL: returnURL.String(),
 		CashierTokenHash: order.HashCashierToken(token), ExpiresAt: time.Now().UTC().Add(order.OrderTTL), RequestID: requestID.(string),
 	})
 	if err != nil {

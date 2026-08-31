@@ -53,7 +53,59 @@ func TestReturnURLPolicyRejectsUnsafeOrUnallowlistedTargets(t *testing.T) {
 	}
 }
 
-func TestNotifyURLMatchesUsesCanonicalHTTPSURL(t *testing.T) {
-	assert.True(t, NotifyURLMatches("https://API.example.com/api/user/epay/notify", "https://api.example.com/api/user/epay/notify"))
-	assert.False(t, NotifyURLMatches("https://api.example.com:8443/api/user/epay/notify", "https://api.example.com/api/user/epay/notify"))
+func TestNotifyURLPolicyAcceptsEveryConfiguredCallbackPath(t *testing.T) {
+	policy, err := NewNotifyURLPolicy([]string{
+		"https://api.example.com/api/user/epay/notify",
+		"https://api.example.com/api/subscription/epay/notify",
+	})
+	require.NoError(t, err)
+
+	tests := []struct {
+		name      string
+		candidate string
+	}{
+		{name: "wallet top-up", candidate: "https://api.example.com/api/user/epay/notify"},
+		{name: "subscription purchase", candidate: "https://api.example.com/api/subscription/epay/notify"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			canonical, err := policy.Canonical(test.candidate)
+			require.NoError(t, err)
+			assert.Equal(t, test.candidate, canonical)
+		})
+	}
+}
+
+func TestNotifyURLPolicyCanonicalizesAndRejectsUnallowlistedDestinations(t *testing.T) {
+	policy, err := NewNotifyURLPolicy([]string{" https://API.example.com/api/user/epay/notify ", "https://api.example.com/api/user/epay/notify"})
+	require.NoError(t, err)
+
+	canonical, err := policy.Canonical("https://API.example.com/api/user/./epay/notify")
+	require.NoError(t, err)
+	assert.Equal(t, "https://api.example.com/api/user/epay/notify", canonical)
+
+	rejected := []struct {
+		name      string
+		candidate string
+	}{
+		{name: "path not allowlisted", candidate: "https://api.example.com/api/subscription/epay/notify"},
+		{name: "host not allowlisted", candidate: "https://evil.example.com/api/user/epay/notify"},
+		{name: "unexpected port", candidate: "https://api.example.com:8443/api/user/epay/notify"},
+		{name: "non HTTPS", candidate: "http://api.example.com/api/user/epay/notify"},
+		{name: "userinfo", candidate: "https://user@api.example.com/api/user/epay/notify"},
+	}
+	for _, test := range rejected {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := policy.Canonical(test.candidate)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestNewNotifyURLPolicyRejectsEmptyOrInvalidAllowlist(t *testing.T) {
+	_, err := NewNotifyURLPolicy(nil)
+	assert.Error(t, err)
+
+	_, err = NewNotifyURLPolicy([]string{"https://api.example.com/api/user/epay/notify", "not-a-url"})
+	assert.Error(t, err)
 }

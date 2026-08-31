@@ -68,7 +68,10 @@ func run() error {
 	shutdownContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	for workerNumber := 0; workerNumber < appConfig.NotificationWorkers; workerNumber++ {
-		worker := delivery.NewWorker(databaseStore, appConfig, fmt.Sprintf("notification-worker-%d", workerNumber+1), nil)
+		worker, err := delivery.NewWorker(databaseStore, appConfig, fmt.Sprintf("notification-worker-%d", workerNumber+1), nil)
+		if err != nil {
+			return err
+		}
 		go worker.Run(shutdownContext)
 	}
 	go order.NewRecoveryScheduler(databaseStore, order.NewNativeOrderService(databaseStore, wechatClient)).Run(shutdownContext)

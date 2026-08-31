@@ -3,6 +3,7 @@ package delivery
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -23,7 +24,12 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) { return f(request) }
 
-func newWorkerFixture(t *testing.T) (*store.Store, store.NotificationTask, config.Config) {
+const (
+	walletNotifyURL       = "https://api.example.com/api/user/epay/notify"
+	subscriptionNotifyURL = "https://api.example.com/api/subscription/epay/notify"
+)
+
+func newWorkerFixtureWithNotifyURL(t *testing.T, notifyURL string) (*store.Store, store.NotificationTask, config.Config) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
@@ -32,7 +38,7 @@ func newWorkerFixture(t *testing.T) (*store.Store, store.NotificationTask, confi
 	paymentOrder := store.PaymentOrder{
 		ID: "delivery-order", OutTradeNo: "delivery-out-trade", GatewayTradeNo: "delivery-gateway", RequestFingerprint: "delivery-fingerprint",
 		EpayPID: "10001", PaymentType: "wxpay", Subject: "Top up", AmountText: "1.00", AmountFen: 100,
-		NotifyURL: "https://api.example.com/api/user/epay/notify", CashierTokenHash: "delivery-token", Status: order.StatusPaidPendingNotify,
+		NotifyURL: notifyURL, CashierTokenHash: "delivery-token", Status: order.StatusPaidPendingNotify,
 		ExpiresAt: time.Now().UTC().Add(15 * time.Minute), Version: 1,
 	}
 	require.NoError(t, repository.DB().Create(&paymentOrder).Error)
@@ -43,7 +49,16 @@ func newWorkerFixture(t *testing.T) (*store.Store, store.NotificationTask, confi
 	require.NoError(t, err)
 	task := store.NotificationTask{ID: "delivery-task", OrderID: paymentOrder.ID, State: order.NotificationPending, PayloadSnapshot: string(payload), NextAttemptAt: time.Now().UTC().Add(-time.Second), Version: 1}
 	require.NoError(t, repository.DB().Create(&task).Error)
-	return repository, task, config.Config{EpayPartnerID: "10001", EpayKey: "shared-key", NewAPINotifyURL: "https://api.example.com/api/user/epay/notify"}
+	appConfig := config.Config{
+		EpayPartnerID: "10001", EpayKey: "shared-key",
+		NewAPINotifyURLs: []string{walletNotifyURL, subscriptionNotifyURL},
+	}
+	return repository, task, appConfig
+}
+
+func newWorkerFixture(t *testing.T) (*store.Store, store.NotificationTask, config.Config) {
+	t.Helper()
+	return newWorkerFixtureWithNotifyURL(t, walletNotifyURL)
 }
 
 func TestWorkerCompletesOnlyStrictEpaySuccessResponse(t *testing.T) {
@@ -57,7 +72,8 @@ func TestWorkerCompletesOnlyStrictEpaySuccessResponse(t *testing.T) {
 		assert.Equal(t, "TRADE_SUCCESS", values.Get("trade_status"))
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(" success\n")), Header: make(http.Header)}, nil
 	})}
-	worker := NewWorker(repository, appConfig, "worker-1", client)
+	worker, err := NewWorker(repository, appConfig, "worker-1", client)
+	require.NoError(t, err)
 	worker.now = func() time.Time { return time.Now().UTC() }
 
 	require.NoError(t, worker.ProcessOne(context.Background()))
@@ -69,13 +85,60 @@ func TestWorkerCompletesOnlyStrictEpaySuccessResponse(t *testing.T) {
 	assert.Equal(t, order.StatusNotified, actualOrder.Status)
 }
 
+// A callback must reach the flow that created the order, so the destination comes from
+// the order itself rather than from a single configured URL.
+func TestWorkerDeliversToTheNotifyURLOfTheOrder(t *testing.T) {
+	tests := []struct {
+		name      string
+		notifyURL string
+	}{
+		{name: "wallet top-up", notifyURL: walletNotifyURL},
+		{name: "subscription purchase", notifyURL: subscriptionNotifyURL},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repository, task, appConfig := newWorkerFixtureWithNotifyURL(t, test.notifyURL)
+			var requested string
+			client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+				requested = request.URL.String()
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("success")), Header: make(http.Header)}, nil
+			})}
+			worker, err := NewWorker(repository, appConfig, "worker-1", client)
+			require.NoError(t, err)
+
+			require.NoError(t, worker.ProcessOne(context.Background()))
+			assert.Equal(t, test.notifyURL, requested)
+			var actualTask store.NotificationTask
+			require.NoError(t, repository.DB().First(&actualTask, "id = ?", task.ID).Error)
+			assert.Equal(t, order.NotificationSucceeded, actualTask.State)
+		})
+	}
+}
+
+func TestWorkerRefusesDeliveryToANotifyURLOutsideTheAllowlist(t *testing.T) {
+	repository, task, appConfig := newWorkerFixtureWithNotifyURL(t, "https://api.example.com/api/removed/epay/notify")
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("delivery must not be attempted")
+	})}
+	worker, err := NewWorker(repository, appConfig, "worker-1", client)
+	require.NoError(t, err)
+
+	require.NoError(t, worker.ProcessOne(context.Background()))
+	var actualTask store.NotificationTask
+	require.NoError(t, repository.DB().First(&actualTask, "id = ?", task.ID).Error)
+	assert.Equal(t, order.NotificationRetry, actualTask.State)
+	require.NotNil(t, actualTask.LastError)
+	assert.Contains(t, *actualTask.LastError, "no longer allowlisted")
+}
+
 func TestWorkerRetriesRejectedResponsesAndReclaimsExpiredLease(t *testing.T) {
 	repository, task, appConfig := newWorkerFixture(t)
 	now := time.Now().UTC()
 	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusTooManyRequests, Body: io.NopCloser(strings.NewReader("busy")), Header: make(http.Header)}, nil
 	})}
-	worker := NewWorker(repository, appConfig, "worker-1", client)
+	worker, err := NewWorker(repository, appConfig, "worker-1", client)
+	require.NoError(t, err)
 	worker.now = func() time.Time { return now }
 	require.NoError(t, worker.ProcessOne(context.Background()))
 

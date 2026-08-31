@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/order"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -27,6 +28,18 @@ func TestNewHTTPClientDisablesEnvironmentProxyAndValidatesRedirects(t *testing.T
 	require.NoError(t, err)
 	request := &http.Request{URL: redirectURL}
 	assert.EqualError(t, client.CheckRedirect(request, nil), "redirect rejected")
+}
+
+func TestValidateAllowlistedDestinationGuardsEveryConfiguredCallbackPath(t *testing.T) {
+	policy, err := order.NewNotifyURLPolicy([]string{walletNotifyURL, subscriptionNotifyURL})
+	require.NoError(t, err)
+	validator := ValidateAllowlistedDestination(policy)
+
+	assert.NoError(t, validator(context.Background(), walletNotifyURL))
+	assert.NoError(t, validator(context.Background(), subscriptionNotifyURL))
+	assert.Error(t, validator(context.Background(), "https://api.example.com/api/other/epay/notify"))
+	assert.Error(t, validator(context.Background(), "https://evil.example.com/api/user/epay/notify"))
+	assert.Error(t, ValidateAllowlistedDestination(nil)(context.Background(), walletNotifyURL))
 }
 
 func TestSecureTransportRejectsRequestBeforeNetworkAccess(t *testing.T) {
