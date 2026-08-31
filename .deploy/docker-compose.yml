@@ -163,7 +163,7 @@ services:
       - ./nginx/templates:/etc/nginx/templates:ro
       - ./nginx/certs:/etc/nginx/certs:ro
       - ./nginx/html:/usr/share/nginx/html:ro
-      - nginx_logs:/var/log/nginx
+      - ./nginx/logs:/var/log/nginx-real
     environment:
       - NEW_API_DOMAIN=${NEW_API_DOMAIN}
       - PAY_DOMAIN=${PAY_DOMAIN}
@@ -181,7 +181,6 @@ volumes:
   mysql_logs:
   newapi_data:
   newapi_logs:
-  nginx_logs:
   #redis_data:
 
 networks:
