@@ -72,6 +72,38 @@ export function isPositiveSalePrice(priceRatio: number | undefined): boolean {
   return typeof priceRatio === 'number' && Number.isFinite(priceRatio) && priceRatio > 0
 }
 
+/** Prefix for the custom top-up input; empty when the display type is not a currency. */
+export function customTopupAmountPrefix(
+  quotaDisplayType: string | undefined
+): string {
+  if (quotaDisplayType === 'CNY') return '¥'
+  if (quotaDisplayType === 'USD') return '$'
+  return ''
+}
+
+/**
+ * Step the custom top-up by one internal unit (USD display: $1; CNY display: one
+ * dollar's worth at the display rate). Does not change pay-money formulas.
+ */
+export function stepCustomTopupAmount(
+  currentInternal: number,
+  delta: 1 | -1,
+  minInternal: number
+): number {
+  const current = Number.isFinite(currentInternal) ? currentInternal : 0
+  const min = Number.isFinite(minInternal) && minInternal > 0 ? minInternal : 0
+  return Math.max(min, current + delta)
+}
+
+export function canDecreaseCustomTopup(
+  currentInternal: number,
+  minInternal: number
+): boolean {
+  const current = Number.isFinite(currentInternal) ? currentInternal : 0
+  const min = Number.isFinite(minInternal) && minInternal > 0 ? minInternal : 0
+  return current > min
+}
+
 /**
  * Get discount label for display (e.g., "20% OFF")
  */

@@ -125,6 +125,12 @@ func NewNotifyURLPolicy(allowlist []string) (*NotifyURLPolicy, error) {
 	return policy, nil
 }
 
+// Allowed exposes the canonical allowlist so a rejection can be logged next to the
+// destinations that were actually configured.
+func (p *NotifyURLPolicy) Allowed() []string {
+	return slices.Clone(p.allowed)
+}
+
 // Canonical returns the allowlisted spelling of candidate so the URL persisted with
 // an order and the destination used for its callback always compare equal.
 func (p *NotifyURLPolicy) Canonical(candidate string) (string, error) {

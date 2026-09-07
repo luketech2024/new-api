@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Gift, ExternalLink, Loader2, Receipt, WalletCards } from 'lucide-react'
+import { Gift, ExternalLink, Loader2, Minus, Plus, Receipt, WalletCards } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -45,6 +45,9 @@ import {
   getPaymentIcon,
   getMinTopupAmount,
   calculatePresetPricing,
+  canDecreaseCustomTopup,
+  customTopupAmountPrefix,
+  stepCustomTopupAmount,
 } from '../lib'
 import type {
   PaymentMethod,
@@ -132,6 +135,8 @@ export function RechargeFormCard({
     )
   }, [topupAmount, displayScale])
 
+  const amountPrefix = customTopupAmountPrefix(currency?.quotaDisplayType)
+
   const handleAmountChange = (value: string) => {
     setLocalAmount(value)
     const displayed = Number.parseFloat(value)
@@ -152,6 +157,7 @@ export function RechargeFormCard({
   const hasWaffoPaymentMethods =
     Array.isArray(waffoPayMethods) && waffoPayMethods.length > 0
   const minTopup = getMinTopupAmount(topupInfo)
+  const canDecreaseAmount = canDecreaseCustomTopup(topupAmount, minTopup)
   const redemptionEnabled = topupInfo?.enable_redemption !== false
 
   if (loading) {
@@ -313,32 +319,76 @@ export function RechargeFormCard({
                 >
                   {t('Custom Amount')}
                 </Label>
-                <div className='grid grid-cols-[minmax(0,1fr)_minmax(110px,0.55fr)] gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center'>
-                  <Input
-                    id='topup-amount'
-                    type='number'
-                    value={localAmount}
-                    onChange={(e) => handleAmountChange(e.target.value)}
-                    min={minTopup}
-                    placeholder={t('Minimum {{amount}}', {
-                      amount: minTopup * displayScale,
-                    })}
-                    className='h-9 text-base sm:h-10 sm:text-lg'
-                  />
-                  <div className='bg-muted/30 flex min-h-9 items-center justify-between gap-2 rounded-md border px-3 lg:min-w-52'>
-                    <span className='text-muted-foreground truncate text-xs'>
-                      {t('Amount Due')}
-                    </span>
-                    {calculating ? (
-                      <Skeleton className='h-5 w-16' />
-                    ) : (
-                      <span className='text-sm font-semibold'>
-                        {salePriceOk
-                          ? formatTopupPayCNY(paymentAmount)
-                          : t('Sale price is invalid')}
+                <div className='flex items-center gap-2'>
+                  <div className='relative min-w-0 flex-1'>
+                    {amountPrefix ? (
+                      <span
+                        aria-hidden='true'
+                        className='text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-base sm:text-lg'
+                      >
+                        {amountPrefix}
                       </span>
-                    )}
+                    ) : null}
+                    <Input
+                      id='topup-amount'
+                      type='text'
+                      inputMode='decimal'
+                      autoComplete='off'
+                      value={localAmount}
+                      onChange={(e) => handleAmountChange(e.target.value)}
+                      placeholder={t('Minimum {{amount}}', {
+                        amount: minTopup * displayScale,
+                      })}
+                      className={cn(
+                        'h-9 text-base sm:h-10 sm:text-lg',
+                        amountPrefix && 'pl-8'
+                      )}
+                    />
                   </div>
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='icon-lg'
+                    className='h-9 w-9 sm:h-10 sm:w-10'
+                    aria-label={t('Decrease amount')}
+                    disabled={!canDecreaseAmount}
+                    onClick={() =>
+                      onTopupAmountChange(
+                        stepCustomTopupAmount(topupAmount, -1, minTopup)
+                      )
+                    }
+                  >
+                    <Minus />
+                  </Button>
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='icon-lg'
+                    className='h-9 w-9 sm:h-10 sm:w-10'
+                    aria-label={t('Increase amount')}
+                    onClick={() =>
+                      onTopupAmountChange(
+                        stepCustomTopupAmount(topupAmount, 1, minTopup)
+                      )
+                    }
+                  >
+                    <Plus />
+                  </Button>
+                </div>
+                <div className='text-muted-foreground flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs'>
+                  <span className='truncate'>{t('Amount Due')}</span>
+                  {calculating ? (
+                    <Skeleton className='h-4 w-16' />
+                  ) : (
+                    <span className='text-foreground text-sm font-semibold'>
+                      {salePriceOk
+                        ? formatTopupPayCNY(paymentAmount)
+                        : t('Sale price is invalid')}
+                    </span>
+                  )}
+                  <span>
+                    · {t('Minimum {{amount}}', { amount: minTopup * displayScale })}
+                  </span>
                 </div>
               </div>
 

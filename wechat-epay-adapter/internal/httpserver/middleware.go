@@ -18,6 +18,11 @@ const MaxRequestBodyBytes int64 = 1 << 20
 const RequestIDHeader = "X-Request-ID"
 const CSPNonceContextKey = "Content-Security-Policy-Nonce"
 
+// RejectReasonContextKey carries why a request was refused. The response body stays
+// generic so no configuration detail leaks to the caller, while the reason still
+// reaches the operator through the request log.
+const RejectReasonContextKey = "reject-reason"
+
 var requestIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{16,64}$`)
 
 type SecurityOptions struct {
@@ -26,7 +31,7 @@ type SecurityOptions struct {
 		ObserveRequest(route, method string, status int, duration time.Duration)
 	}
 	RequestLogger interface {
-		LogRequest(requestID, method, route string, status int, duration time.Duration)
+		LogRequest(requestID, method, route string, status int, duration time.Duration, rejectReason string)
 	}
 }
 
@@ -41,7 +46,7 @@ func applySecurityMiddleware(router *gin.Engine, options SecurityOptions) error 
 func requestObservationMiddleware(observer interface {
 	ObserveRequest(route, method string, status int, duration time.Duration)
 }, logger interface {
-	LogRequest(requestID, method, route string, status int, duration time.Duration)
+	LogRequest(requestID, method, route string, status int, duration time.Duration, rejectReason string)
 }) gin.HandlerFunc {
 	return func(context *gin.Context) {
 		started := time.Now()
@@ -52,7 +57,7 @@ func requestObservationMiddleware(observer interface {
 		}
 		if logger != nil {
 			requestID, _ := context.Get(RequestIDHeader)
-			logger.LogRequest(requestID.(string), context.Request.Method, route, context.Writer.Status(), time.Since(started))
+			logger.LogRequest(requestID.(string), context.Request.Method, route, context.Writer.Status(), time.Since(started), context.GetString(RejectReasonContextKey))
 		}
 	}
 }
@@ -91,7 +96,8 @@ func securityHeadersMiddleware() gin.HandlerFunc {
 	}
 }
 
-func AbortErrorPage(context *gin.Context, status int) {
+func AbortErrorPage(context *gin.Context, status int, reason string) {
+	context.Set(RejectReasonContextKey, reason)
 	context.Abort()
 	context.Data(status, "text/html; charset=utf-8", []byte(MinimalErrorPage(status)))
 }

@@ -143,14 +143,14 @@ func (handler *CashierHandler) Show(context *gin.Context) {
 	if status == order.StatusPayable && paymentOrder.WechatCodeURL != nil {
 		png, err := qrcode.Encode(*paymentOrder.WechatCodeURL, qrcode.Medium, 256)
 		if err != nil {
-			AbortErrorPage(context, http.StatusServiceUnavailable)
+			AbortErrorPage(context, http.StatusServiceUnavailable, "encoding the payment QR code failed: "+err.Error())
 			return
 		}
 		page.QRCode = template.URL("data:image/png;base64," + base64.StdEncoding.EncodeToString(png))
 	}
 	parsed, err := template.New("cashier").Parse(cashierPageTemplate)
 	if err != nil {
-		AbortErrorPage(context, http.StatusInternalServerError)
+		AbortErrorPage(context, http.StatusInternalServerError, "parsing the cashier page template failed: "+err.Error())
 		return
 	}
 	context.Header("Cache-Control", "no-store")
@@ -183,12 +183,12 @@ func (handler *CashierHandler) Status(context *gin.Context) {
 func (handler *CashierHandler) findOrder(context *gin.Context) (store.PaymentOrder, bool) {
 	token := context.Param("access_token")
 	if !cashierTokenPattern.MatchString(token) {
-		AbortErrorPage(context, http.StatusNotFound)
+		AbortErrorPage(context, http.StatusNotFound, "cashier token is malformed")
 		return store.PaymentOrder{}, false
 	}
 	paymentOrder, err := handler.store.FindPaymentOrderByCashierTokenHash(order.HashCashierToken(token))
 	if err != nil {
-		AbortErrorPage(context, http.StatusNotFound)
+		AbortErrorPage(context, http.StatusNotFound, "no order matches this cashier token: "+err.Error())
 		return store.PaymentOrder{}, false
 	}
 	return paymentOrder, true
