@@ -333,6 +333,8 @@ export function SubscriptionPurchaseDialog(props: Props) {
             </AlertDescription>
           </Alert>
         )}
+
+        {limitReached && (
           <Alert variant='destructive'>
             <AlertDescription>
               {t('Purchase limit reached')} ({props.purchaseCount}/
