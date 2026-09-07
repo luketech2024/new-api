@@ -127,14 +127,19 @@ func (m *Metrics) ObserveRequest(route, method string, status int, duration time
 	m.mu.Unlock()
 }
 
-func (l *Logger) LogRequest(requestID, method, route string, status int, duration time.Duration) {
-	l.logger.Info("http request completed",
+func (l *Logger) LogRequest(requestID, method, route string, status int, duration time.Duration, rejectReason string) {
+	attributes := []any{
 		slog.String("request_id", requestID),
 		slog.String("method", method),
 		slog.String("route", route),
 		slog.Int("status", status),
 		slog.Int64("duration_ms", duration.Milliseconds()),
-	)
+	}
+	if rejectReason == "" {
+		l.logger.Info("http request completed", attributes...)
+		return
+	}
+	l.logger.Warn("http request refused", append(attributes, slog.String("reject_reason", rejectReason))...)
 }
 
 func (m *Metrics) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {
