@@ -34,11 +34,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { formatNumber } from '@/lib/format'
+import { formatCurrencyFromUSD } from '@/lib/currency'
+import { useSystemConfig } from '@/hooks/use-system-config'
 import { cn } from '@/lib/utils'
 
 import {
-  formatCurrency,
+  formatTopupPayCNY,
+  isPositiveSalePrice,
   getDiscountLabel,
   getPaymentIcon,
   getMinTopupAmount,
@@ -113,21 +115,30 @@ export function RechargeFormCard({
   enableWaffoPancakeTopup,
 }: RechargeFormCardProps) {
   const { t } = useTranslation()
-  const [localAmount, setLocalAmount] = useState(topupAmount.toString())
+  const { currency } = useSystemConfig()
+  const isCnyDisplay = currency?.quotaDisplayType === 'CNY'
+  const displayScale =
+    isCnyDisplay && usdExchangeRate > 0 ? usdExchangeRate : 1
+  const salePriceOk = isPositiveSalePrice(priceRatio)
+  const [localAmount, setLocalAmount] = useState(
+    (topupAmount * displayScale).toString()
+  )
 
   useEffect(() => {
-    // Empty string must survive, otherwise the field can never be cleared
     setLocalAmount((prev) =>
-      prev === '' && topupAmount === 0 ? prev : topupAmount.toString()
+      prev === '' && topupAmount === 0
+        ? prev
+        : String(topupAmount * displayScale)
     )
-  }, [topupAmount])
+  }, [topupAmount, displayScale])
 
   const handleAmountChange = (value: string) => {
     setLocalAmount(value)
-    const numValue = Number.parseInt(value) || 0
-    if (numValue >= 0) {
-      onTopupAmountChange(numValue)
+    const displayed = Number.parseFloat(value)
+    if (!Number.isFinite(displayed) || displayed < 0) {
+      return
     }
+    onTopupAmountChange(displayScale > 0 ? displayed / displayScale : displayed)
   }
 
   const hasConfigurableTopup =
@@ -233,7 +244,6 @@ export function RechargeFormCard({
                         topupInfo?.discount?.[preset.value] ||
                         1.0
                       const {
-                        displayValue,
                         actualPrice,
                         savedAmount,
                         hasDiscount,
@@ -257,7 +267,11 @@ export function RechargeFormCard({
                         >
                           <div className='flex w-full items-center justify-between'>
                             <div className='text-base font-semibold sm:text-lg'>
-                              {formatNumber(displayValue)}
+                              {formatCurrencyFromUSD(preset.value, {
+                                digitsLarge: 2,
+                                digitsSmall: 2,
+                                abbreviate: false,
+                              })}
                             </div>
                             {hasDiscount && (
                               <div className='text-xs font-medium text-green-600'>
@@ -266,11 +280,22 @@ export function RechargeFormCard({
                             )}
                           </div>
                           <div className='text-muted-foreground mt-1.5 w-full text-xs sm:mt-2'>
-                            Pay {formatCurrency(actualPrice)}
-                            {hasDiscount && savedAmount > 0 && (
+                            {t('Amount credited')}
+                            {salePriceOk ? (
+                              <>
+                                {' · '}
+                                {t('Amount Due')} {formatTopupPayCNY(actualPrice)}
+                              </>
+                            ) : (
+                              <>
+                                {' · '}
+                                {t('Sale price is invalid')}
+                              </>
+                            )}
+                            {hasDiscount && savedAmount > 0 && salePriceOk && (
                               <span className='text-green-600'>
                                 {' '}
-                                • Save {formatCurrency(savedAmount)}
+                                • {t('You save')} {formatTopupPayCNY(savedAmount)}
                               </span>
                             )}
                           </div>
@@ -295,18 +320,22 @@ export function RechargeFormCard({
                     value={localAmount}
                     onChange={(e) => handleAmountChange(e.target.value)}
                     min={minTopup}
-                    placeholder={`Minimum ${minTopup}`}
+                    placeholder={t('Minimum {{amount}}', {
+                      amount: minTopup * displayScale,
+                    })}
                     className='h-9 text-base sm:h-10 sm:text-lg'
                   />
                   <div className='bg-muted/30 flex min-h-9 items-center justify-between gap-2 rounded-md border px-3 lg:min-w-52'>
                     <span className='text-muted-foreground truncate text-xs'>
-                      {t('Amount to pay:')}
+                      {t('Amount Due')}
                     </span>
                     {calculating ? (
                       <Skeleton className='h-5 w-16' />
                     ) : (
                       <span className='text-sm font-semibold'>
-                        {formatCurrency(paymentAmount)}
+                        {salePriceOk
+                          ? formatTopupPayCNY(paymentAmount)
+                          : t('Sale price is invalid')}
                       </span>
                     )}
                   </div>
@@ -339,7 +368,7 @@ export function RechargeFormCard({
                           key={method.type}
                           variant='outline'
                           onClick={() => onPaymentMethodSelect(method)}
-                          disabled={disabled || !!paymentLoading}
+                          disabled={disabled || !!paymentLoading || !salePriceOk}
                           title={disabledReason}
                           aria-label={
                             disabledReason

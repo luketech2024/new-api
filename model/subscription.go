@@ -11,7 +11,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/cachex"
 	"github.com/samber/hot"
-	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -739,17 +738,8 @@ func AdminBindSubscription(userId int, planId int, sourceNote string) (string, e
 	return "", nil
 }
 
-func calcSubscriptionBalanceQuota(priceAmount float64) (int, error) {
-	if priceAmount <= 0 {
-		return 0, nil
-	}
-	if common.QuotaPerUnit <= 0 {
-		return 0, errors.New("额度单位配置错误")
-	}
-	quota := decimal.NewFromFloat(priceAmount).
-		Mul(decimal.NewFromFloat(common.QuotaPerUnit)).
-		Ceil()
-	return common.QuotaFromDecimalStrict(quota)
+func calcSubscriptionBalanceQuota(plan *SubscriptionPlan) (int, error) {
+	return RequiredQuotaFromPlan(plan)
 }
 
 // PurchaseSubscriptionWithBalance creates a subscription by deducting the user's wallet quota.
@@ -777,9 +767,21 @@ func PurchaseSubscriptionWithBalance(userId int, planId int) error {
 			return errors.New("该套餐不允许使用余额兑换")
 		}
 
-		requiredQuota, err := calcSubscriptionBalanceQuota(plan.PriceAmount)
+		requiredQuota, err := calcSubscriptionBalanceQuota(plan)
 		if err != nil {
 			return err
+		}
+
+		moneyYuan := 0.0
+		if plan.PriceAmount > 0 {
+			yuan, err := PlanWeChatCNYYuan(plan)
+			if err != nil {
+				return err
+			}
+			moneyYuan, _ = yuan.Float64()
+			if moneyYuan < 0.01 {
+				return errors.New("套餐金额过低")
+			}
 		}
 
 		var user User
@@ -806,7 +808,7 @@ func PurchaseSubscriptionWithBalance(userId int, planId int) error {
 		order := &SubscriptionOrder{
 			UserId:          userId,
 			PlanId:          plan.Id,
-			Money:           plan.PriceAmount,
+			Money:           moneyYuan,
 			TradeNo:         tradeNo,
 			PaymentMethod:   PaymentMethodBalance,
 			PaymentProvider: PaymentProviderBalance,
@@ -820,7 +822,7 @@ func PurchaseSubscriptionWithBalance(userId int, planId int) error {
 		}
 
 		logPlanTitle = plan.Title
-		logMoney = plan.PriceAmount
+		logMoney = moneyYuan
 		chargedQuota = requiredQuota
 		if subscription.PrevUserGroup != "" {
 			upgradeGroup = strings.TrimSpace(subscription.UpgradeGroup)

@@ -339,7 +339,7 @@ export function SubscriptionsMutateDrawer({
                       </FormControl>
                       <FormDescription>
                         {t(
-                          'Amount the user pays to purchase this plan; the actual currency depends on the payment gateway.'
+                          'The number uses the settlement currency. Display settings do not change it.'
                         )}
                       </FormDescription>
                       <FormMessage />
@@ -347,6 +347,44 @@ export function SubscriptionsMutateDrawer({
                   )}
                 />
 
+                <FormField
+                  control={form.control}
+                  name='currency'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Settlement currency')}</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem value='USD'>
+                              {t('US Dollar (USD)')}
+                            </SelectItem>
+                            <SelectItem value='CNY'>
+                              {t('Chinese Yuan (CNY)')}
+                            </SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        {t(
+                          'New plans default to USD. Choose CNY when the price is charged in yuan.'
+                        )}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
                 <FormField
                   control={form.control}
                   name='total_amount'

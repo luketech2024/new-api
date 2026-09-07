@@ -48,8 +48,28 @@ export const subscriptionPlanSchema = z.object({
 
 export type SubscriptionPlan = z.infer<typeof subscriptionPlanSchema>
 
+export interface PlanSettlementView {
+  amount: number
+  currency: string
+}
+
+export interface PlanDueDisplay {
+  amount: number
+  currency: string
+  note_settlement?: string | null
+}
+
+export interface PlanBalanceNeed {
+  required_quota: number
+  ok: boolean
+  error?: string
+}
+
 export interface PlanRecord {
   plan: SubscriptionPlan
+  settlement?: PlanSettlementView
+  due_display?: PlanDueDisplay
+  balance?: PlanBalanceNeed
 }
 
 // ============================================================================

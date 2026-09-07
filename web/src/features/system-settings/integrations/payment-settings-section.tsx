@@ -102,7 +102,9 @@ const paymentSchema = z.object({
   }, 'Provide a valid callback URL starting with http:// or https://'),
   EpayId: z.string(),
   EpayKey: z.string(),
-  Price: z.coerce.number().min(0),
+  Price: z.coerce
+    .number()
+    .min(0.0001, 'Sale price must be greater than 0'),
   MinTopUp: z.coerce.number().min(0),
   CustomCallbackAddress: z
     .string()
@@ -905,7 +907,7 @@ export function PaymentSettingsSection({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>
-                          {t('Price (local currency / USD)')}
+                          {t('Top-up sale price')}
                         </FormLabel>
                         <FormControl>
                           <Input
@@ -917,7 +919,7 @@ export function PaymentSettingsSection({
                         </FormControl>
                         <FormDescription>
                           {t(
-                            'How much to charge for each US dollar of balance (Epay)'
+                            'CNY charged for $1 of wallet quota. Also used to convert USD subscription prices to WeChat CNY. Example: 7.3 means ¥7.3 credits $1.'
                           )}
                         </FormDescription>
                         <FormMessage />

@@ -16,16 +16,26 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-export { formatDuration, formatResetPeriod, formatTimestamp } from './format'
-export {
-  formatSettlementMoney,
-  planDueLabel,
-  planPurchaseDisabled,
-} from './due-display'
-export {
-  getPlanFormSchema,
-  PLAN_FORM_DEFAULTS,
-  planToFormValues,
-  formValuesToPlanPayload,
-  type PlanFormValues,
-} from './plan-form'
+
+import type { PlanRecord } from '../types'
+
+export function formatSettlementMoney(
+  amount: number | undefined,
+  currency: string | undefined
+): string {
+  const n = Number(amount)
+  if (!Number.isFinite(n)) return '-'
+  const body = n.toFixed(2)
+  return currency === 'CNY' ? `¥${body}` : `$${body}`
+}
+
+export function planPurchaseDisabled(plan: PlanRecord | null | undefined): boolean {
+  return plan?.balance?.ok === false
+}
+
+export function planDueLabel(plan: PlanRecord | null | undefined): string {
+  if (!plan?.due_display) {
+    return formatSettlementMoney(plan?.plan.price_amount, plan?.plan.currency)
+  }
+  return formatSettlementMoney(plan.due_display.amount, plan.due_display.currency)
+}

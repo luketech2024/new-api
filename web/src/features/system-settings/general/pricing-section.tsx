@@ -236,11 +236,7 @@ export function PricingSection({ defaultValues }: PricingSectionProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      {displayType === 'CNY'
-                        ? t('CNY per USD')
-                        : displayType === 'USD'
-                          ? t('USD Exchange Rate')
-                          : t('USD Exchange Rate')}
+                      {t('Display exchange rate')}
                     </FormLabel>
                     <FormControl>
                       <Input
@@ -251,7 +247,7 @@ export function PricingSection({ defaultValues }: PricingSectionProps) {
                     </FormControl>
                     <FormDescription>
                       {t(
-                        'Real exchange rate between USD and your payment gateway currency'
+                        'Formats $1 of quota in the display currency. Example: 7 means $1 shows as ¥7. Does not change WeChat or top-up charges.'
                       )}
                     </FormDescription>
                     <FormMessage />

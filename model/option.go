@@ -1,6 +1,8 @@
 package model
 
 import (
+	"errors"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -211,6 +213,17 @@ func validateOptionValue(key string, value string) error {
 	}
 	if key == "MaxTokenAutoGroups" {
 		return setting.ValidateMaxTokenAutoGroups(value)
+	}
+	if key == "Price" || key == "USDExchangeRate" {
+		return validatePositiveFiniteFloat(value)
+	}
+	return nil
+}
+
+func validatePositiveFiniteFloat(value string) error {
+	f, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) || f <= 0 {
+		return errors.New("必须为正数")
 	}
 	return nil
 }

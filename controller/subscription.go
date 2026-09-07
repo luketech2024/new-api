@@ -16,7 +16,10 @@ import (
 // ---- Shared types ----
 
 type SubscriptionPlanDTO struct {
-	Plan model.SubscriptionPlan `json:"plan"`
+	Plan       model.SubscriptionPlan         `json:"plan"`
+	Settlement *model.SubscriptionSettlement  `json:"settlement,omitempty"`
+	DueDisplay *model.SubscriptionDueDisplay  `json:"due_display,omitempty"`
+	Balance    *model.SubscriptionBalanceNeed `json:"balance,omitempty"`
 }
 
 type BillingPreferenceRequest struct {
@@ -25,6 +28,29 @@ type BillingPreferenceRequest struct {
 
 type SubscriptionBalancePayRequest struct {
 	PlanId int `json:"plan_id"`
+}
+
+func newSubscriptionPlanDTO(p model.SubscriptionPlan) SubscriptionPlanDTO {
+	p.NormalizeDefaults()
+	quote := model.QuoteFromPlan(&p)
+	settlement := quote.Settlement
+	due := quote.DueDisplay
+	balance := quote.Balance
+	return SubscriptionPlanDTO{
+		Plan:       p,
+		Settlement: &settlement,
+		DueDisplay: &due,
+		Balance:    &balance,
+	}
+}
+
+func applyAdminPlanCurrency(plan *model.SubscriptionPlan) error {
+	currency, err := model.NormalizePlanCurrency(plan.Currency)
+	if err != nil {
+		return err
+	}
+	plan.Currency = currency
+	return nil
 }
 
 // ---- User APIs ----
@@ -42,10 +68,7 @@ func GetSubscriptionPlans(c *gin.Context) {
 	}
 	result := make([]SubscriptionPlanDTO, 0, len(plans))
 	for _, p := range plans {
-		p.NormalizeDefaults()
-		result = append(result, SubscriptionPlanDTO{
-			Plan: p,
-		})
+		result = append(result, newSubscriptionPlanDTO(p))
 	}
 	common.ApiSuccess(c, result)
 }
@@ -126,10 +149,7 @@ func AdminListSubscriptionPlans(c *gin.Context) {
 	}
 	result := make([]SubscriptionPlanDTO, 0, len(plans))
 	for _, p := range plans {
-		p.NormalizeDefaults()
-		result = append(result, SubscriptionPlanDTO{
-			Plan: p,
-		})
+		result = append(result, newSubscriptionPlanDTO(p))
 	}
 	common.ApiSuccess(c, result)
 }
@@ -161,10 +181,10 @@ func AdminCreateSubscriptionPlan(c *gin.Context) {
 		common.ApiErrorMsg(c, "价格不能超过9999")
 		return
 	}
-	if req.Plan.Currency == "" {
-		req.Plan.Currency = "USD"
+	if err := applyAdminPlanCurrency(&req.Plan); err != nil {
+		common.ApiErrorMsg(c, err.Error())
+		return
 	}
-	req.Plan.Currency = "USD"
 	if req.Plan.AllowBalancePay == nil {
 		req.Plan.AllowBalancePay = common.GetPointer(true)
 	}
@@ -241,10 +261,10 @@ func AdminUpdateSubscriptionPlan(c *gin.Context) {
 		return
 	}
 	req.Plan.Id = id
-	if req.Plan.Currency == "" {
-		req.Plan.Currency = "USD"
+	if err := applyAdminPlanCurrency(&req.Plan); err != nil {
+		common.ApiErrorMsg(c, err.Error())
+		return
 	}
-	req.Plan.Currency = "USD"
 	if req.Plan.DurationUnit == "" {
 		req.Plan.DurationUnit = model.SubscriptionDurationMonth
 	}

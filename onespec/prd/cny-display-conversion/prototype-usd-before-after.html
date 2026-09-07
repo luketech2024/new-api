@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>展示货币切为美元后的对照 · 订阅购买弹窗 + 微信收银台</title>
+  <style>
+    :root {
+      --bg: #eef2f0; --card: #fff; --border: #e4e4e7; --text: #18181b;
+      --muted: #71717a; --blue: #2f8bff; --danger: #dc2626; --ok: #16a34a;
+      --warn: #b45309; --wx: #1aad4b;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }
+    header { background: #fff; border-bottom: 1px solid var(--border); padding: 16px 24px; position: sticky; top: 0; z-index: 5; }
+    header h1 { margin: 0 0 6px; font-size: 18px; }
+    header p { margin: 0; color: var(--muted); font-size: 13px; }
+    .wrap { max-width: 1320px; margin: 0 auto; padding: 16px; }
+    .banner { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 10px; padding: 12px 14px; font-size: 13px; line-height: 1.7; margin-bottom: 16px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } }
+    .col { display: flex; flex-direction: column; gap: 12px; }
+    .colhead { font-size: 13px; font-weight: 700; padding: 8px 12px; border-radius: 8px; }
+    .now .colhead { background: #f1f1f3; color: #52525b; }
+    .after .colhead { background: #e8f2ff; color: #1d5fd0; }
+
+    .dlg { background: #fff; border-radius: 16px; box-shadow: 0 6px 24px rgba(0,0,0,.08); padding: 18px 20px; }
+    .dlg-t { display: flex; align-items: center; justify-content: space-between; font-size: 16px; font-weight: 600; margin-bottom: 14px; }
+    .dlg-t span.x { color: #a1a1aa; font-weight: 400; }
+    .panel { background: #fafafa; border: 1px solid #f0f0f1; border-radius: 10px; padding: 12px 14px; }
+    .line { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+    .line .k { color: var(--muted); }
+    .line .v { font-weight: 500; }
+    .sep { height: 1px; background: #ececee; margin: 8px 0; }
+    .due { font-size: 20px; font-weight: 700; color: var(--blue); }
+    .due.bad { color: var(--danger); }
+    .subnote { font-size: 11px; color: var(--muted); text-align: right; margin-top: 2px; }
+    .box { border: 1px solid #ececee; border-radius: 10px; padding: 12px 14px; margin-top: 12px; }
+    .box .line { font-size: 12px; }
+    .btn { width: 100%; border: 1px solid #e4e4e7; border-radius: 10px; background: #fff; padding: 9px; font-size: 14px; margin-top: 8px; }
+    .payrow { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; }
+    .sel { border: 1px solid #e4e4e7; border-radius: 999px; padding: 6px 14px; font-size: 13px; }
+    .paybtn { background: var(--blue); color: #fff; border: none; border-radius: 999px; padding: 8px 20px; font-size: 14px; }
+    .cap { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+    .wxcard { background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 6px 24px rgba(0,0,0,.08); }
+    .wxtop { background: var(--wx); color: #fff; text-align: center; padding: 16px; }
+    .wxtop .brand { font-size: 12px; letter-spacing: .14em; opacity: .9; }
+    .wxtop .sub { font-size: 17px; font-weight: 700; margin-top: 6px; }
+    .wxbody { text-align: center; padding: 18px; }
+    .wxbody .lbl { font-size: 12px; color: var(--muted); }
+    .wxbody .amt { font-size: 28px; font-weight: 700; margin-top: 6px; }
+    .qr { width: 120px; height: 120px; margin: 12px auto 0; border: 1px solid var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; }
+
+    .flag { font-size: 12px; border-radius: 8px; padding: 8px 10px; margin-top: 8px; line-height: 1.6; }
+    .flag.bad { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+    .flag.good { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
+    .tag { display: inline-block; font-size: 11px; border-radius: 999px; padding: 1px 7px; margin-left: 6px; vertical-align: middle; }
+    .tag.bad { background: #fee2e2; color: #b91c1c; }
+    .tag.good { background: #dcfce7; color: #15803d; }
+    .tag.warn { background: #fef3c7; color: #92400e; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; border-radius: 10px; overflow: hidden; }
+    th, td { border-bottom: 1px solid var(--border); padding: 9px 10px; text-align: left; vertical-align: top; }
+    th { background: #fafafa; font-weight: 600; }
+    .bad { color: var(--danger); }
+    .good { color: var(--ok); }
+    .ask { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin-top: 16px; }
+    .ask h2 { margin: 0 0 6px; font-size: 15px; }
+    .ask label { display: block; margin: 8px 0; font-size: 14px; }
+    .note { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.7; }
+    h2.sec { font-size: 15px; margin: 22px 0 10px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>补充对照 · 把展示货币切换为美元之后</h1>
+    <p>同一个「VIP成长组」套餐，只把后台「额度展示」从人民币改成美元，其它配置不动。结论：<strong>有问题，而且比人民币模式更难发现</strong>。</p>
+  </header>
+
+  <div class="wrap">
+    <div class="banner">
+      <strong>为什么更难发现：</strong>人民币模式下矛盾是 <code>$20.00</code> 对 <code>¥140</code> 对 <code>¥20.00</code>，一眼看得出。
+      切成美元后，弹窗里「应付金额」和「余额必需」都显示 <code>$20.00</code>，看起来「对上了」；
+      但微信实际仍然只收 <code>¥20.00</code>。页面标价 20 美元、实收 20 元人民币，差约 7 倍，且不会有任何报错。
+    </div>
+
+    <div class="grid">
+      <!-- 现在 -->
+      <section class="col now">
+        <div class="colhead">现在（展示货币 = 美元）</div>
+
+        <div class="dlg">
+          <div class="dlg-t"><span>购买订阅套餐</span><span class="x">×</span></div>
+          <div class="panel">
+            <div class="line"><span class="k">套餐名称</span><span class="v">VIP成长组</span></div>
+            <div class="line"><span class="k">有效期</span><span class="v">1 个月</span></div>
+            <div class="line"><span class="k">套餐额度</span><span class="v bad">$2.86 <span class="tag bad">比价格还低</span></span></div>
+            <div class="line"><span class="k">升级分组</span><span class="v" style="color:var(--blue)">vip</span></div>
+            <div class="sep"></div>
+            <div class="line"><span class="k" style="color:var(--text);font-weight:600">应付金额</span><span class="due bad">$20.00</span></div>
+          </div>
+          <div class="flag bad">花 $20.00 只买到 $2.86 的额度，账面上像亏本套餐。<br />真实意图应是「花 20 元买 20 元额度」，但美元展示把这层含义弄丢了。</div>
+
+          <div class="box">
+            <div class="line"><span class="k">必需</span><span class="v">$20.00</span></div>
+            <div class="line"><span class="k">可用</span><span class="v">$185.71</span></div>
+            <button class="btn">使用余额支付</button>
+          </div>
+          <div class="flag bad">「必需 $20.00」和「应付 $20.00」数字相同，看似正常；<br />但余额实际扣的是 20 美元额度（约值 ¥140），而在线支付只收 ¥20.00。</div>
+
+          <div class="cap">选择支付方式</div>
+          <div class="payrow">
+            <span class="sel">支付宝 ⌄</span>
+            <button class="paybtn">支付</button>
+          </div>
+        </div>
+
+        <div class="wxcard">
+          <div class="wxtop">
+            <div class="brand">WECHAT PAY</div>
+            <div class="sub">SUB:VIP成长组</div>
+          </div>
+          <div class="wxbody">
+            <div class="lbl">应付金额</div>
+            <div class="amt bad">¥20.00</div>
+            <div class="qr">二维码</div>
+          </div>
+        </div>
+        <div class="flag bad">页面标 $20.00，收银台只收 ¥20.00。若按美元定价意图，应收约 ¥146，收入相差约 86%。</div>
+      </section>
+
+      <!-- 改后 -->
+      <section class="col after">
+        <div class="colhead">改后（展示货币 = 美元）</div>
+
+        <div class="dlg">
+          <div class="dlg-t"><span>购买订阅套餐</span><span class="x">×</span></div>
+          <div class="panel">
+            <div class="line"><span class="k">套餐名称</span><span class="v">VIP成长组</span></div>
+            <div class="line"><span class="k">有效期</span><span class="v">1 个月</span></div>
+            <div class="line"><span class="k">套餐额度</span><span class="v">$2.86 <span class="tag good">不变</span></span></div>
+            <div class="line"><span class="k">升级分组</span><span class="v" style="color:var(--blue)">vip</span></div>
+            <div class="sep"></div>
+            <div class="line"><span class="k" style="color:var(--text);font-weight:600">应付金额</span><span class="due">$2.74</span></div>
+          </div>
+          <div class="subnote">实际扣款 ¥20.00（微信支付以人民币结算）</div>
+          <div class="flag good">花 $2.74 买 $2.86 额度，账面合理。金额按站点货币换算展示，并明确告知真实扣款币种与金额。</div>
+
+          <div class="box">
+            <div class="line"><span class="k">余额支付需要</span><span class="v">$2.74</span></div>
+            <div class="line"><span class="k">可用余额</span><span class="v">$185.71</span></div>
+            <button class="btn">使用余额支付</button>
+          </div>
+          <div class="flag good">余额支付与在线支付同价，都是 $2.74（即 ¥20.00）。换支付方式不改变代价。</div>
+
+          <div class="cap">选择支付方式</div>
+          <div class="payrow">
+            <span class="sel">支付宝 ⌄</span>
+            <button class="paybtn">支付</button>
+          </div>
+        </div>
+
+        <div class="wxcard">
+          <div class="wxtop">
+            <div class="brand">WECHAT PAY</div>
+            <div class="sub">SUB:VIP成长组</div>
+          </div>
+          <div class="wxbody">
+            <div class="lbl">应付金额</div>
+            <div class="amt">¥20.00</div>
+            <div class="qr">二维码</div>
+          </div>
+        </div>
+        <div class="flag good">收银台不变，仍是 ¥20.00，并与弹窗标注的「实际扣款」一致。</div>
+      </section>
+    </div>
+
+    <h2 class="sec">美元展示下这几个数分别改成什么</h2>
+    <table>
+      <tr><th>位置</th><th>现在</th><th>改后</th><th>为什么</th></tr>
+      <tr>
+        <td>弹窗 · 应付金额</td>
+        <td class="bad">$20.00</td>
+        <td class="good">$2.74<br /><span style="font-size:11px;color:#71717a">附注：实际扣款 ¥20.00</span></td>
+        <td>套餐价 20 是人民币，按站点货币换算后展示，并说明真实扣款</td>
+      </tr>
+      <tr>
+        <td>弹窗 · 必需（余额）</td>
+        <td class="bad">$20.00<br /><span style="font-size:11px;color:#71717a">实扣 20 美元额度</span></td>
+        <td class="good">$2.74</td>
+        <td>与在线支付同价，不再因为换支付方式贵 7 倍</td>
+      </tr>
+      <tr>
+        <td>弹窗 · 套餐额度</td>
+        <td>$2.86</td>
+        <td>$2.86（不变）</td>
+        <td>数值正确，本次不改</td>
+      </tr>
+      <tr>
+        <td>可用余额</td>
+        <td>$185.71</td>
+        <td>$185.71（不变）</td>
+        <td>按展示汇率折算，正确</td>
+      </tr>
+      <tr>
+        <td>微信收银台</td>
+        <td>¥20.00</td>
+        <td>¥20.00（不变）</td>
+        <td>收款口径正确，作为对齐基准</td>
+      </tr>
+      <tr>
+        <td>Creem 通道收款</td>
+        <td class="bad">$20.00</td>
+        <td class="good">与微信一致（¥20.00 等值）</td>
+        <td>目前币种跟着展示设置变，同一套餐不同通道差约 7 倍</td>
+      </tr>
+    </table>
+
+    <h2 class="sec">两种展示货币下的问题是同一个根因</h2>
+    <table>
+      <tr><th>套餐价格「20」被谁当成什么</th><th>结果</th></tr>
+      <tr><td>购买弹窗：当成美元，拼死 <code>$</code> 符号</td><td class="bad">人民币站点显示 $20.00；美元站点显示 $20.00 但实收 ¥20</td></tr>
+      <tr><td>微信 / 易支付：当成人民币，直接收 20 元</td><td class="good">实收 ¥20.00，这是正确基准</td></tr>
+      <tr><td>余额支付：当成 20 美元额度</td><td class="bad">扣掉约 ¥140 价值的额度，比在线支付贵约 7 倍</td></tr>
+      <tr><td>Creem：跟着展示设置变（美元站按 $20，人民币站按 ¥20）</td><td class="bad">同一套餐换通道价格差约 7 倍</td></tr>
+    </table>
+    <p class="note">
+      也就是说，切美元不是「另一个 bug」，而是同一个根因换了一种表现：<strong>套餐价格字段的货币含义从未被统一定义</strong>。
+      本页按「套餐价格 = 用户实付人民币」这一口径给出改后效果，理由是套餐额度 ¥20.02 与价格 ¥20.00 几乎等值，符合正常定价；若按美元理解，则是花 $20 买 $2.86 额度，不成立。
+    </p>
+    <p class="note">
+      本页展示汇率取 7、充值售价取 7.3（系统默认值），因此 ¥20.00 ÷ 7.3 ≈ $2.74。实际数字以站点配置为准。
+    </p>
+
+    <div class="ask">
+      <h2>请客户确认（建议项已预选）</h2>
+      <label><input type="checkbox" checked disabled /> <strong>已确认</strong>：套餐价格「20」的含义是<strong>用户实付人民币 20 元</strong>（而非 20 美元）</label>
+      <label><input type="checkbox" checked /> 美元展示下，应付金额按站点货币换算展示，并注明真实扣款币种与金额</label>
+      <label><input type="checkbox" checked /> 余额支付与在线支付同价（修掉约 7 倍差）</label>
+      <label><input type="checkbox" checked /> Creem 等其它通道与微信收款金额保持一致，不再随展示设置改变币种</label>
+      <label><input type="checkbox" checked /> 套餐额度、可用余额、微信收银台三处维持现状</label>
+      <p class="note">
+        第一项已拍板为人民币口径，微信实收 ¥20.00 维持不变，不涉及历史订单调整。其余各项按上方勾选实现。
+      </p>
+    </div>
+  </div>
+</body>
+</html>

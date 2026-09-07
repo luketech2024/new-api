@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>订阅管理 · 只切换展示货币后价格会不会等值换算</title>
+  <style>
+    :root {
+      --bg: #eef2f0; --card: #fff; --border: #e4e4e7; --text: #18181b;
+      --muted: #71717a; --blue: #2f8bff; --danger: #dc2626; --ok: #16a34a;
+      --green: #16a34a; --link: #2563eb;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }
+    header { background: #fff; border-bottom: 1px solid var(--border); padding: 16px 24px; position: sticky; top: 0; z-index: 5; }
+    header h1 { margin: 0 0 6px; font-size: 18px; }
+    header p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+    .wrap { max-width: 1480px; margin: 0 auto; padding: 16px; }
+    .banner { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 10px; padding: 12px 14px; font-size: 13px; line-height: 1.7; margin-bottom: 16px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
+    .col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+    .colhead { font-size: 13px; font-weight: 700; padding: 8px 12px; border-radius: 8px; }
+    .now .colhead { background: #f1f1f3; color: #52525b; }
+    .after .colhead { background: #fef3c7; color: #92400e; }
+
+    .page { background: #fff; border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.08); overflow: hidden; }
+    .page-h { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #f0f0f1; gap: 12px; }
+    .page-h h3 { margin: 0; font-size: 16px; }
+    .tip { font-size: 12px; color: var(--muted); }
+    .newbtn { background: var(--blue); color: #fff; border: none; border-radius: 8px; padding: 7px 12px; font-size: 13px; white-space: nowrap; }
+
+    .scroll { overflow-x: auto; }
+    table.admin { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 720px; }
+    table.admin th { text-align: left; font-weight: 600; color: #52525b; padding: 10px 10px; border-bottom: 1px solid #ececee; background: #fafafa; white-space: nowrap; }
+    table.admin td { padding: 12px 10px; border-bottom: 1px solid #f4f4f5; vertical-align: top; }
+    .id { color: var(--link); font-weight: 600; }
+    .name { font-weight: 600; }
+    .sub { color: var(--muted); font-size: 11px; margin-top: 2px; max-width: 220px; }
+    .price { color: var(--green); font-weight: 700; }
+    .price.bad { color: var(--danger); }
+    .muted { color: var(--muted); }
+    .ok { color: var(--ok); font-weight: 600; }
+    .group { color: var(--link); }
+    .ops { color: #a1a1aa; letter-spacing: 6px; }
+
+    .flag { font-size: 12px; border-radius: 8px; padding: 8px 10px; margin-top: 8px; line-height: 1.6; }
+    .flag.bad { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+    .flag.good { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
+    .flag.warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+    .tag { display: inline-block; font-size: 11px; border-radius: 999px; padding: 1px 7px; margin-left: 4px; }
+    .tag.bad { background: #fee2e2; color: #b91c1c; }
+    .tag.good { background: #dcfce7; color: #15803d; }
+    .tag.warn { background: #fef3c7; color: #92400e; }
+
+    table.cmp { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; border-radius: 10px; overflow: hidden; }
+    table.cmp th, table.cmp td { border-bottom: 1px solid var(--border); padding: 9px 10px; text-align: left; vertical-align: top; }
+    table.cmp th { background: #fafafa; font-weight: 600; }
+    .bad { color: var(--danger); }
+    .good { color: var(--ok); }
+    h2.sec { font-size: 15px; margin: 22px 0 10px; }
+    .note { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.7; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>后台「订阅管理」· 只切换展示货币，价格会不会按汇率改成等值？</h1>
+    <p>左侧按线上截图还原（展示货币 = 美元）。右侧是<strong>只把额度展示改成人民币、套餐一条都不改</strong>之后，这张表实际会变成什么样。</p>
+  </header>
+
+  <div class="wrap">
+    <div class="banner">
+      <strong>结论：配置数字不会变，这张表也不会把 $20 改成等值 ¥140。</strong>
+      价格列把数字原样拼上写死的 <code>$</code>；套餐额度列会走展示汇率。
+      同一张表里两套餐的口径已经不一致：VIP 存的是 <code>20</code>，新人包名称写「9.9 元」但价格列是 <code>$1.41</code>（约 9.9÷7）。
+    </div>
+
+    <div class="grid">
+      <section class="col now">
+        <div class="colhead">现在 · 展示货币 = 美元（截图还原）</div>
+        <div class="page">
+          <div class="page-h">
+            <h3>订阅管理</h3>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span class="tip">Stripe/Creem 需在第三方平台创建商品并填入 ID</span>
+              <button class="newbtn">+ 新建套餐</button>
+            </div>
+          </div>
+          <div class="scroll">
+            <table class="admin">
+              <thead>
+                <tr>
+                  <th>ID</th><th>套餐</th><th>价格</th><th>有效期</th><th>额度重置</th>
+                  <th>优先级</th><th>状态</th><th>套餐额度</th><th>升级分组</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="id">2</td>
+                  <td>
+                    <div class="name">VIP成长组</div>
+                    <div class="sub">持续使用、效率任务、希望兼顾体验与成本</div>
+                  </td>
+                  <td class="price">$20.00</td>
+                  <td class="muted">1 个月</td>
+                  <td class="muted">不重置</td>
+                  <td class="muted">2</td>
+                  <td class="ok">启用</td>
+                  <td>$2.86</td>
+                  <td class="group">vip</td>
+                </tr>
+                <tr>
+                  <td class="id">1</td>
+                  <td>
+                    <div class="name">9.9 元新人 AI 创作体验包</div>
+                    <div class="sub">零散试用、低频问答、轻任务与基础生图</div>
+                  </td>
+                  <td class="price">$1.41</td>
+                  <td class="muted">7 天</td>
+                  <td class="muted">不重置</td>
+                  <td class="muted">1</td>
+                  <td class="ok">启用</td>
+                  <td>$1.41</td>
+                  <td class="group">default</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="flag warn">
+          名称写「9.9 元」，价格列却是 $1.41。说明录入时有人已经按汇率把 9.9 元折成了美元。
+          VIP 成长组没有做这一步，价格列直接是 $20.00，微信实际收的是 ¥20.00。
+        </div>
+      </section>
+
+      <section class="col after">
+        <div class="colhead">切人民币后 · 套餐配置一条都不改（现状代码）</div>
+        <div class="page">
+          <div class="page-h">
+            <h3>订阅管理</h3>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span class="tip">Stripe/Creem 需在第三方平台创建商品并填入 ID</span>
+              <button class="newbtn">+ 新建套餐</button>
+            </div>
+          </div>
+          <div class="scroll">
+            <table class="admin">
+              <thead>
+                <tr>
+                  <th>ID</th><th>套餐</th><th>价格</th><th>有效期</th><th>额度重置</th>
+                  <th>优先级</th><th>状态</th><th>套餐额度</th><th>升级分组</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="id">2</td>
+                  <td>
+                    <div class="name">VIP成长组</div>
+                    <div class="sub">持续使用、效率任务、希望兼顾体验与成本</div>
+                  </td>
+                  <td class="price bad">$20.00 <span class="tag bad">没换算</span></td>
+                  <td class="muted">1 个月</td>
+                  <td class="muted">不重置</td>
+                  <td class="muted">2</td>
+                  <td class="ok">启用</td>
+                  <td>¥20.02 <span class="tag good">乘了汇率</span></td>
+                  <td class="group">vip</td>
+                </tr>
+                <tr>
+                  <td class="id">1</td>
+                  <td>
+                    <div class="name">9.9 元新人 AI 创作体验包</div>
+                    <div class="sub">零散试用、低频问答、轻任务与基础生图</div>
+                  </td>
+                  <td class="price bad">$1.41 <span class="tag bad">没换算</span></td>
+                  <td class="muted">7 天</td>
+                  <td class="muted">不重置</td>
+                  <td class="muted">1</td>
+                  <td class="ok">启用</td>
+                  <td>¥9.87 <span class="tag good">乘了汇率</span></td>
+                  <td class="group">default</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="flag bad">
+          价格列仍是 $20.00 / $1.41，不会变成 ¥140 / ¥9.87。
+          额度列会变：VIP $2.86 → ¥20.02，新人包 $1.41 → ¥9.87。
+          同一行里「价格」和「套餐额度」用了两套规则。
+        </div>
+      </section>
+    </div>
+
+    <h2 class="sec">这张表上两个套餐，切货币后各列怎么变</h2>
+    <table class="cmp">
+      <tr>
+        <th>套餐</th>
+        <th>列</th>
+        <th>美元展示（截图）</th>
+        <th>只切人民币后</th>
+        <th>配置有没有改</th>
+      </tr>
+      <tr>
+        <td rowspan="3">VIP成长组</td>
+        <td>价格</td>
+        <td>$20.00</td>
+        <td class="bad">$20.00（符号、数字都不动）</td>
+        <td>price_amount 仍是 20</td>
+      </tr>
+      <tr>
+        <td>套餐额度</td>
+        <td>$2.86</td>
+        <td class="good">¥20.02</td>
+        <td>内部额度不改，只改展示</td>
+      </tr>
+      <tr>
+        <td>微信实收</td>
+        <td>¥20.00</td>
+        <td>¥20.00</td>
+        <td>按 20 原样下单</td>
+      </tr>
+      <tr>
+        <td rowspan="3">9.9 元新人包</td>
+        <td>价格</td>
+        <td>$1.41</td>
+        <td class="bad">$1.41（符号、数字都不动）</td>
+        <td>price_amount 仍是 1.41</td>
+      </tr>
+      <tr>
+        <td>套餐额度</td>
+        <td>$1.41</td>
+        <td class="good">¥9.87</td>
+        <td>内部额度不改，只改展示</td>
+      </tr>
+      <tr>
+        <td>微信实收</td>
+        <td>¥1.41</td>
+        <td class="bad">¥1.41（不是 9.9 元）</td>
+        <td>按 1.41 原样下单</td>
+      </tr>
+    </table>
+
+    <p class="note">
+      额度按展示汇率 7 估算：2.86 × 7 ≈ 20.02，1.41 × 7 ≈ 9.87。价格列代码是写死 <code>$</code> + <code>price_amount</code>，不读展示货币，也不乘汇率。
+    </p>
+
+    <h2 class="sec">这张表暴露的第二个问题：两个套餐录入口径已经不同</h2>
+    <table class="cmp">
+      <tr><th>套餐</th><th>名称怎么写</th><th>价格列怎么存</th><th>额度怎么存</th><th>含义</th></tr>
+      <tr>
+        <td>VIP成长组</td>
+        <td>没写币种</td>
+        <td>20</td>
+        <td>约 $2.86 / ¥20.02</td>
+        <td>价格按「收 20 元」在用；额度按内部美元额度在展示</td>
+      </tr>
+      <tr>
+        <td>9.9 元新人包</td>
+        <td>明确写「9.9 元」</td>
+        <td>1.41（≈ 9.9 ÷ 7）</td>
+        <td>约 $1.41 / ¥9.87</td>
+        <td>录入时把人民币售价先折成了美元；微信若按字段原价下单，只收 ¥1.41</td>
+      </tr>
+    </table>
+    <p class="note">
+      所以不是「切货币会不会自动换算」这么简单：<strong>同一张订阅管理表里，两条套餐的价格字段已经不是同一种货币含义。</strong>
+      切展示货币不会把它们对齐，只是把额度列换了符号和倍率。
+    </p>
+
+    <h2 class="sec">若按已拍板口径修正展示（配置数字仍不改写）</h2>
+    <table class="cmp">
+      <tr><th>套餐</th><th>价格列改后</th><th>套餐额度改后</th><th>说明</th></tr>
+      <tr>
+        <td>VIP成长组</td>
+        <td class="good">¥20.00</td>
+        <td>¥20.02（不变）</td>
+        <td>价格跟站点货币走符号，数字仍是配置里的 20；额度本来就会换算</td>
+      </tr>
+      <tr>
+        <td>9.9 元新人包</td>
+        <td class="bad">¥1.41</td>
+        <td>¥9.87（不变）</td>
+        <td>展示修了符号以后，会更清楚地暴露：名称写 9.9 元，系统价却是 1.41 元。这是历史录入问题，不是切货币能自动修好的</td>
+      </tr>
+    </table>
+    <p class="note">
+      若客户希望新人包微信实收 9.9 元，需要把该套餐的价格配置从 1.41 改成 9.9（或按统一口径重录），不属于「切换展示货币自动换算」。
+      VIP 成长组按已拍板口径保持 20，不要改成 140。
+    </p>
+  </div>
+</body>
+</html>

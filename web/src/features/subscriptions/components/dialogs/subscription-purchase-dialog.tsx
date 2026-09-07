@@ -34,9 +34,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
-import { useSystemConfig } from '@/hooks/use-system-config'
 import { formatQuota } from '@/lib/format'
-import { DEFAULT_CURRENCY_CONFIG } from '@/stores/system-config-store'
 
 import {
   paySubscriptionStripe,
@@ -46,6 +44,10 @@ import {
   paySubscriptionBalance,
 } from '../../api'
 import { formatDuration, formatResetPeriod } from '../../lib'
+import {
+  planDueLabel,
+  planPurchaseDisabled,
+} from '../../lib/due-display'
 import type { PlanRecord } from '../../types'
 
 interface PaymentMethod {
@@ -70,7 +72,6 @@ interface Props {
 
 export function SubscriptionPurchaseDialog(props: Props) {
   const { t } = useTranslation()
-  const { currency } = useSystemConfig()
   const [paying, setPaying] = useState(false)
   const [selectedEpayMethod, setSelectedEpayMethod] = useState('')
 
@@ -98,18 +99,14 @@ export function SubscriptionPurchaseDialog(props: Props) {
     selectedEpayMethod ||
     t('Select payment method')
   const totalAmount = Number(plan.total_amount || 0)
-  const price = Number(plan.price_amount || 0).toFixed(2)
-  const quotaPerUnit =
-    currency?.quotaPerUnit && currency.quotaPerUnit > 0
-      ? currency.quotaPerUnit
-      : DEFAULT_CURRENCY_CONFIG.quotaPerUnit
-  const balanceCost = Math.max(
-    0,
-    Math.ceil(Number(plan.price_amount || 0) * quotaPerUnit)
-  )
-  const userQuota = Math.max(0, Number(props.userQuota || 0))
+  const dueLabel = planDueLabel(props.plan)
+  const dueNote = props.plan?.due_display?.note_settlement
+  const quoteOk = !planPurchaseDisabled(props.plan)
+  const quoteError = props.plan?.balance?.error
   const allowBalancePay = plan.allow_balance_pay !== false
-  const insufficientBalance = userQuota < balanceCost
+  const userQuota = Math.max(0, Number(props.userQuota || 0))
+  const insufficientBalance =
+    quoteOk && allowBalancePay && userQuota < Number(props.plan?.balance?.required_quota || 0)
   const limitReached =
     (props.purchaseLimit || 0) > 0 &&
     (props.purchaseCount || 0) >= (props.purchaseLimit || 0)
@@ -317,11 +314,25 @@ export function SubscriptionPurchaseDialog(props: Props) {
           <Separator />
           <div className='flex items-center justify-between'>
             <span className='text-sm font-medium'>{t('Amount Due')}</span>
-            <span className='text-primary text-lg font-bold'>${price}</span>
+            <div className='text-right'>
+              <span className='text-primary text-lg font-bold'>{dueLabel}</span>
+              {dueNote ? (
+                <div className='text-muted-foreground text-xs'>
+                  {t('Settled as {{amount}}', { amount: dueNote })}
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
 
-        {limitReached && (
+        {!quoteOk && (
+          <Alert variant='destructive'>
+            <AlertDescription>
+              {quoteError ||
+                t('This plan cannot be purchased because the sale price is invalid.')}
+            </AlertDescription>
+          </Alert>
+        )}
           <Alert variant='destructive'>
             <AlertDescription>
               {t('Purchase limit reached')} ({props.purchaseCount}/
@@ -333,7 +344,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
         <div className='flex flex-col gap-2 rounded-md border p-3'>
           <div className='flex items-center justify-between gap-2 text-xs'>
             <span className='text-muted-foreground'>{t('Required')}</span>
-            <span>{formatQuota(balanceCost)}</span>
+            <span>{dueLabel}</span>
           </div>
           <div className='flex items-center justify-between gap-2 text-xs'>
             <span className='text-muted-foreground'>{t('Available')}</span>
@@ -356,7 +367,11 @@ export function SubscriptionPurchaseDialog(props: Props) {
             variant='outline'
             onClick={handlePayBalance}
             disabled={
-              paying || limitReached || !allowBalancePay || insufficientBalance
+              paying ||
+              limitReached ||
+              !allowBalancePay ||
+              insufficientBalance ||
+              !quoteOk
             }
           >
             {t('Pay with Balance')}
@@ -375,7 +390,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
                     variant='outline'
                     className='flex-1'
                     onClick={handlePayStripe}
-                    disabled={paying || limitReached}
+                    disabled={paying || limitReached || !quoteOk}
                   >
                     Stripe
                   </Button>
@@ -385,7 +400,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
                     variant='outline'
                     className='flex-1'
                     onClick={handlePayCreem}
-                    disabled={paying || limitReached}
+                    disabled={paying || limitReached || !quoteOk}
                   >
                     Creem
                   </Button>
@@ -395,7 +410,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
                     variant='outline'
                     className='flex-1'
                     onClick={handlePayWaffoPancake}
-                    disabled={paying || limitReached}
+                    disabled={paying || limitReached || !quoteOk}
                   >
                     Waffo Pancake
                   </Button>
@@ -413,7 +428,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
                   ]}
                   value={selectedEpayMethod}
                   onValueChange={(v) => v !== null && setSelectedEpayMethod(v)}
-                  disabled={limitReached}
+                  disabled={limitReached || !quoteOk}
                 >
                   <SelectTrigger className='flex-1'>
                     <SelectValue>{selectedEpayMethodLabel}</SelectValue>
@@ -430,7 +445,7 @@ export function SubscriptionPurchaseDialog(props: Props) {
                 </Select>
                 <Button
                   onClick={handlePayEpay}
-                  disabled={paying || !selectedEpayMethod || limitReached}
+                  disabled={paying || !selectedEpayMethod || limitReached || !quoteOk}
                 >
                   {t('Pay')}
                 </Button>

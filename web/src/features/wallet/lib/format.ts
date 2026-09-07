@@ -61,6 +61,17 @@ export function formatCurrency(amount: number | string): string {
   }).format(numeric)
 }
 
+export function formatTopupPayCNY(amount: number | string): string {
+  const numeric =
+    typeof amount === 'number' ? amount : Number.parseFloat(String(amount))
+  if (!Number.isFinite(numeric) || numeric <= 0) return '-'
+  return `¥${numeric.toFixed(2)}`
+}
+
+export function isPositiveSalePrice(priceRatio: number | undefined): boolean {
+  return typeof priceRatio === 'number' && Number.isFinite(priceRatio) && priceRatio > 0
+}
+
 /**
  * Get discount label for display (e.g., "20% OFF")
  */
