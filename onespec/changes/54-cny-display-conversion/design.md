@@ -263,6 +263,7 @@ flowchart LR
   - 实付：`formatLocalCurrencyAmount(actualPrice)`，文案「实付」，`actualPrice = preset.value * Price * discount`。
   - 去掉无单位的「7 / Pay 49」。
   - 人民币展示：自定义输入绑定 **展示单位**（`value * usdExchangeRate`），提交前 **除回** 内部 `amount` 再调既有计算器；禁止选中档位后输入框仍显示内部 7。
+  - 自定义金额交互（对照原型方案 A）：不用原生 `number` spinner；输入框接近满宽并加 `$`/`¥` 前缀；右侧两个约 40×40 的 −/+；应付金额作为输入框下方辅助文案。步进每次 ±1 内部单位；已达最低充值额时 − 置灰。不改 `getPayMoney`。
 - **异常**：`Price` 非法 → 不展示实付数字、阻断支付。
 - **汇率 ≠ 售价**：允许到账 70、实付 73 这类差异。
 

@@ -16,6 +16,7 @@ type OrderView struct {
 	Order                 store.PaymentOrder
 	NotificationTask      *store.NotificationTask
 	WechatTransactionMask string
+	AlipayTransactionMask string
 	LastError             string
 }
 
@@ -63,6 +64,9 @@ func newOrderView(paymentOrder store.PaymentOrder, task *store.NotificationTask)
 	view := OrderView{Order: paymentOrder, NotificationTask: task}
 	if paymentOrder.WechatTransactionID != nil {
 		view.WechatTransactionMask = maskIdentifier(*paymentOrder.WechatTransactionID)
+	}
+	if paymentOrder.AlipayTradeNo != nil {
+		view.AlipayTransactionMask = maskIdentifier(*paymentOrder.AlipayTradeNo)
 	}
 	if task != nil && task.LastError != nil {
 		view.LastError = maskError(*task.LastError)

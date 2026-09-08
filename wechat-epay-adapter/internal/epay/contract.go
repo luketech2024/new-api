@@ -10,9 +10,15 @@ import (
 
 const (
 	PaymentTypeWechat  = "wxpay"
+	PaymentTypeAlipay  = "alipay"
 	SignTypeMD5        = "MD5"
 	TradeStatusSuccess = "TRADE_SUCCESS"
 )
+
+// AllowedPaymentType is the Epay type whitelist for intake and callback snapshots.
+func AllowedPaymentType(value string) bool {
+	return value == PaymentTypeWechat || value == PaymentTypeAlipay
+}
 
 // Sign returns a go-epay compatible signature without mutating params.
 func Sign(params map[string]string, key string) string {

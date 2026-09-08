@@ -28,6 +28,19 @@ func TestHealthEndpointsReflectProcessAndDatabaseReadiness(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, ready.Code)
 }
 
+func TestHealthReadyFailsWhenAlipayMaterialsMissing(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, store.Migrate(db))
+	router := New(db, SecurityOptions{ReadyCheck: func() error {
+		return assert.AnError
+	}})
+
+	ready := httptest.NewRecorder()
+	router.ServeHTTP(ready, httptest.NewRequest(http.MethodGet, RouteHealthReady, nil))
+	assert.Equal(t, http.StatusServiceUnavailable, ready.Code)
+}
+
 func TestMetricsEndpointRequiresBearer(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)

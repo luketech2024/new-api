@@ -93,3 +93,20 @@ func TestWechatNotificationAcknowledgesUnknownOrderWithoutSettlement(t *testing.
 	require.NoError(t, database.DB().Model(&store.NotificationTask{}).Count(&taskCount).Error)
 	assert.Zero(t, taskCount)
 }
+
+func TestWechatNotificationReviewsAlipayOrderWithoutWechatTradeNo(t *testing.T) {
+	notice := wechat.PaymentNotice{
+		NotificationID: "notice-cross", MerchantOrderNo: "notify-out-trade", WechatOrderNo: "wechat-cross", MerchantID: "merchant", AppID: "app",
+		TradeState: wechat.TradeStateSuccess, AmountFen: 100, Currency: wechat.CurrencyCNY, PaidAt: time.Now().UTC(),
+	}
+	router, database, paymentOrder := newWechatNotificationRouter(t, fakeNotificationVerifier{notice: notice})
+	require.NoError(t, database.DB().Model(&store.PaymentOrder{}).Where("id = ?", paymentOrder.ID).Update("payment_type", "alipay").Error)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, notificationRequest())
+	require.Equal(t, http.StatusNoContent, response.Code)
+	var actual store.PaymentOrder
+	require.NoError(t, database.DB().First(&actual, "id = ?", paymentOrder.ID).Error)
+	assert.Equal(t, order.StatusManualReview, actual.Status)
+	assert.Nil(t, actual.WechatTransactionID)
+	assert.Nil(t, actual.AlipayTradeNo)
+}

@@ -84,3 +84,19 @@ func TestMetricsExposeOnlyBoundedLabelsAndStateCounts(t *testing.T) {
 	assert.NotContains(t, response.Body.String(), "sensitive-order-number")
 	assert.NotContains(t, response.Body.String(), "https://pay.example.com/notify")
 }
+
+func TestMetricsExposeChannelEventsWithoutOrderIdentifiers(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, store.Migrate(db))
+	metrics := NewMetrics(store.New(db))
+	metrics.ObserveChannel("alipay", "verify_fail")
+	metrics.ObserveChannel("wxpay", "paid")
+	response := httptest.NewRecorder()
+	metrics.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	require.Equal(t, http.StatusOK, response.Code)
+	assert.Contains(t, response.Body.String(), `payment_channel_events{channel="alipay",event="verify_fail"} 1`)
+	assert.Contains(t, response.Body.String(), `payment_channel_events{channel="wxpay",event="paid"} 1`)
+	assert.NotContains(t, response.Body.String(), "USR1NO")
+	assert.NotContains(t, response.Body.String(), "private_key")
+}

@@ -5,7 +5,9 @@ import (
 	"net/http"
 
 	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/admin"
+	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/alipay"
 	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/config"
+	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/observability"
 	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/order"
 	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/store"
 	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/wechat"
@@ -31,6 +33,12 @@ func New(db *gorm.DB, options ...SecurityOptions) *gin.Engine {
 			context.Status(http.StatusServiceUnavailable)
 			return
 		}
+		if securityOptions.ReadyCheck != nil {
+			if err := securityOptions.ReadyCheck(); err != nil {
+				context.Status(http.StatusServiceUnavailable)
+				return
+			}
+		}
 		context.Status(http.StatusNoContent)
 	})
 	return router
@@ -40,7 +48,7 @@ func RegisterMetricsRoute(router *gin.Engine, metrics http.Handler, token string
 	router.GET(RouteMetrics, MetricsBearer(token), gin.WrapH(metrics))
 }
 
-func RegisterSubmitRoute(router *gin.Engine, database *store.Store, appConfig config.Config, wechatClients ...wechat.Client) error {
+func RegisterSubmitRoute(router *gin.Engine, database *store.Store, appConfig config.Config, wechatClient wechat.Client, alipayClient alipay.Client, metrics *observability.Metrics) error {
 	policy, err := order.NewReturnURLPolicy(appConfig.ReturnURLAllowlist, nil)
 	if err != nil {
 		return err
@@ -56,16 +64,25 @@ func RegisterSubmitRoute(router *gin.Engine, database *store.Store, appConfig co
 	adminHandler := NewAdminHandler(admin.New(database))
 	adminRoutes.GET("/orders/:out_trade_no", adminHandler.GetOrder)
 	adminRoutes.POST("/orders/:out_trade_no/retry-notification", adminHandler.RetryNotification)
-	if len(wechatClients) == 0 || wechatClients[0] == nil {
-		router.POST(RouteSubmit, NewSubmitHandler(database, appConfig, policy, notifyPolicy).Handle)
-		return nil
+
+	var nativeOrders *order.NativeOrderService
+	if wechatClient != nil {
+		verifier, ok := wechatClient.(wechat.NotificationVerifier)
+		if !ok {
+			return fmt.Errorf("WeChat client does not support notification verification")
+		}
+		router.POST(RouteWechatNotification, NewWechatNotificationHandler(database, verifier, appConfig).Handle)
+		nativeOrders = order.NewNativeOrderService(database, wechatClient)
 	}
-	verifier, ok := wechatClients[0].(wechat.NotificationVerifier)
-	if !ok {
-		return fmt.Errorf("WeChat client does not support notification verification")
+	handler := NewSubmitHandler(database, appConfig, policy, notifyPolicy, nativeOrders)
+	if alipayClient != nil {
+		verifier, ok := alipayClient.(alipay.NotificationVerifier)
+		if !ok {
+			return fmt.Errorf("Alipay client does not support notification verification")
+		}
+		handler.precreate = order.NewPrecreateService(database, alipayClient)
+		router.POST(RouteAlipayNotification, NewAlipayNotificationHandler(database, verifier, appConfig, metrics).Handle)
 	}
-	router.POST(RouteWechatNotification, NewWechatNotificationHandler(database, verifier, appConfig).Handle)
-	nativeOrders := order.NewNativeOrderService(database, wechatClients[0])
-	router.POST(RouteSubmit, NewSubmitHandler(database, appConfig, policy, notifyPolicy, nativeOrders).Handle)
+	router.POST(RouteSubmit, handler.Handle)
 	return nil
 }

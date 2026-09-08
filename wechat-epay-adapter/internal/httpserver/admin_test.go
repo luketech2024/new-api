@@ -74,6 +74,7 @@ func TestAdminOrderRequiresBearerAndMasksTransactionID(t *testing.T) {
 	assert.Contains(t, authorized.Body.String(), `"wechat_trade_no":"****1234"`)
 	assert.NotContains(t, authorized.Body.String(), "42000012345678901234")
 	assert.Contains(t, authorized.Body.String(), `"notification_status":"RETRY"`)
+	assert.Contains(t, authorized.Body.String(), `"payment_type":"wxpay"`)
 }
 
 func TestAdminRetryReusesRetryAndDeadTasks(t *testing.T) {
@@ -133,4 +134,31 @@ func TestAdminRetryRejectsSensitiveAuditReason(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, response.Code)
 	assert.JSONEq(t, `{"error":"invalid_request"}`, response.Body.String())
+}
+
+func TestAdminOrderMasksAlipayTradeNumber(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, store.Migrate(db))
+	database := store.New(db)
+	now := time.Now().UTC().Add(-time.Minute)
+	tradeNo := "202609070011223344"
+	paymentOrder := store.PaymentOrder{
+		ID: "admin-alipay-order", OutTradeNo: "admin-alipay-out-trade", GatewayTradeNo: "admin-alipay-gateway", RequestFingerprint: "admin-alipay-fingerprint",
+		EpayPID: "10001", PaymentType: "alipay", Subject: "Top up", AmountText: "1.00", AmountFen: 100,
+		NotifyURL: "https://api.example.com/api/user/epay/notify", CashierTokenHash: "cashier-token-hash-2",
+		Status: order.StatusPaidPendingNotify, AlipayTradeNo: &tradeNo, ExpiresAt: now.Add(time.Hour), PaidAt: &now, Version: 1,
+	}
+	require.NoError(t, database.DB().Create(&paymentOrder).Error)
+	router := New(db)
+	handler := NewAdminHandler(admin.New(database))
+	routes := router.Group("/api/v1/admin", AdminBearer(testAdminToken))
+	routes.GET("/orders/:out_trade_no", handler.GetOrder)
+
+	authorized := httptest.NewRecorder()
+	router.ServeHTTP(authorized, adminRequest(http.MethodGet, "/api/v1/admin/orders/admin-alipay-out-trade", "", true))
+	require.Equal(t, http.StatusOK, authorized.Code)
+	assert.Contains(t, authorized.Body.String(), `"payment_type":"alipay"`)
+	assert.Contains(t, authorized.Body.String(), `"alipay_trade_no":"****3344"`)
+	assert.NotContains(t, authorized.Body.String(), tradeNo)
 }

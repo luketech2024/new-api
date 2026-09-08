@@ -31,13 +31,18 @@ const (
 
 func newWorkerFixtureWithNotifyURL(t *testing.T, notifyURL string) (*store.Store, store.NotificationTask, config.Config) {
 	t.Helper()
+	return newWorkerFixtureWithChannel(t, notifyURL, "wxpay", "delivery-gateway")
+}
+
+func newWorkerFixtureWithChannel(t *testing.T, notifyURL, paymentType, tradeNo string) (*store.Store, store.NotificationTask, config.Config) {
+	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, store.Migrate(db))
 	repository := store.New(db)
 	paymentOrder := store.PaymentOrder{
-		ID: "delivery-order", OutTradeNo: "delivery-out-trade", GatewayTradeNo: "delivery-gateway", RequestFingerprint: "delivery-fingerprint",
-		EpayPID: "10001", PaymentType: "wxpay", Subject: "Top up", AmountText: "1.00", AmountFen: 100,
+		ID: "delivery-order", OutTradeNo: "delivery-out-trade", GatewayTradeNo: tradeNo, RequestFingerprint: "delivery-fingerprint",
+		EpayPID: "10001", PaymentType: paymentType, Subject: "Top up", AmountText: "1.00", AmountFen: 100,
 		NotifyURL: notifyURL, CashierTokenHash: "delivery-token", Status: order.StatusPaidPendingNotify,
 		ExpiresAt: time.Now().UTC().Add(15 * time.Minute), Version: 1,
 	}
@@ -161,4 +166,22 @@ func TestWorkerRetriesRejectedResponsesAndReclaimsExpiredLease(t *testing.T) {
 	var reclaimed store.NotificationTask
 	require.NoError(t, repository.DB().First(&reclaimed, "id = ?", task.ID).Error)
 	assert.Equal(t, order.NotificationSucceeded, reclaimed.State)
+}
+
+func TestWorkerDeliversAlipayCallbackType(t *testing.T) {
+	repository, _, appConfig := newWorkerFixtureWithChannel(t, walletNotifyURL, "alipay", "2026090700112233")
+	var values url.Values
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		body, err := io.ReadAll(request.Body)
+		require.NoError(t, err)
+		parsed, err := url.ParseQuery(string(body))
+		require.NoError(t, err)
+		values = parsed
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("success")), Header: make(http.Header)}, nil
+	})}
+	worker, err := NewWorker(repository, appConfig, "worker-1", client)
+	require.NoError(t, err)
+	require.NoError(t, worker.ProcessOne(context.Background()))
+	assert.Equal(t, "alipay", values.Get("type"))
+	assert.Equal(t, "2026090700112233", values.Get("trade_no"))
 }

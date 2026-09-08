@@ -52,7 +52,7 @@ func TestRecoverySchedulerExpiresOnlyPayableOrdersAndNeverRecreatesUnknownOrders
 			return wechat.OrderQuery{MerchantOrderNo: unknown.OutTradeNo, AmountFen: unknown.AmountFen, Currency: wechat.CurrencyCNY}, nil
 		},
 	})
-	scheduler := order.NewRecoveryScheduler(repository, native)
+	scheduler := order.NewRecoveryScheduler(repository, native, nil)
 
 	require.NoError(t, scheduler.Process(context.Background()))
 	assert.Zero(t, createCalls)
@@ -75,12 +75,24 @@ func TestRecoverySchedulerMovesExpiredUnknownOrdersToManualReview(t *testing.T) 
 		},
 		query: func(context.Context, string) (wechat.OrderQuery, error) { return wechat.OrderQuery{}, nil },
 	})
-	scheduler := order.NewRecoveryScheduler(repository, native)
+	scheduler := order.NewRecoveryScheduler(repository, native, nil)
 
 	require.NoError(t, scheduler.Process(context.Background()))
 	var actual store.PaymentOrder
 	require.NoError(t, repository.DB().First(&actual, "id = ?", unknown.ID).Error)
 	assert.Equal(t, order.StatusManualReview, actual.Status)
+}
+
+func TestRecoverySchedulerSkipsWechatUnknownOrdersWhenNativeServiceMissing(t *testing.T) {
+	repository := newRecoveryStore(t)
+	now := time.Now().UTC()
+	unknown := recoveryOrder("unknown-no-native", order.StatusCreateUnknown, now.Add(-time.Minute), now.Add(10*time.Minute))
+	require.NoError(t, repository.DB().Create(&unknown).Error)
+	scheduler := order.NewRecoveryScheduler(repository, nil, nil)
+	require.NoError(t, scheduler.Process(context.Background()))
+	var actual store.PaymentOrder
+	require.NoError(t, repository.DB().First(&actual, "id = ?", unknown.ID).Error)
+	assert.Equal(t, order.StatusCreateUnknown, actual.Status)
 }
 
 type schedulerWechatClient struct {

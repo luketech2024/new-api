@@ -106,6 +106,7 @@
   - **前端代码变更**：
     - `web/src/features/wallet/components/recharge-form-card.tsx`、`payment-confirm-dialog.tsx`、`lib/format.ts`：档位标明到账（展示货币）与实付（售价×折扣）；去掉无单位 Pay
     - 人民币展示下自定义输入与档位到账同一单位，提交前除回内部 `amount`
+    - 自定义金额采用方案 A：货币前缀 + 大号 −/+ + 应付金额下移；步进 1 内部单位；`format.test.ts` 覆盖步进下限
   - **后端代码变更**：
     - 不改 `getPayMoney` / `getTopUpQuota` 公式；档位配置列表不改写
   - 验收标准：售价≠展示汇率时到账与实付可以不同；售价非法不得用错误单位展示实付

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/alipay"
+	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/epay"
 	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/order"
 	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/wechat"
 	"github.com/google/uuid"
@@ -30,6 +32,9 @@ type PaymentOrder struct {
 	WechatTransactionID   *string      `gorm:"size:64;uniqueIndex"`
 	WechatNotificationID  *string      `gorm:"size:64;uniqueIndex"`
 	WechatPayerOpenIDHash *string      `gorm:"size:64"`
+	AlipayQrCode          *string      `gorm:"type:text"`
+	AlipayTradeNo         *string      `gorm:"size:64;uniqueIndex:idx_payment_orders_alipay_trade_no"`
+	AlipayNotifyID        *string      `gorm:"size:128;uniqueIndex:idx_payment_orders_alipay_notify_id"`
 	ExpiresAt             time.Time    `gorm:"not null;index:idx_payment_orders_status_expires_at,priority:2"`
 	PaidAt                *time.Time
 	NotifiedAt            *time.Time
@@ -112,6 +117,17 @@ type ConfirmWechatPaymentInput struct {
 type ConfirmWechatPaymentResult struct {
 	UnknownOrder bool
 	Invalid      bool
+	Idempotent   bool
+}
+
+type ConfirmAlipayPaymentInput struct {
+	Notice           alipay.PaymentNotice
+	ExpectedAppID    string
+	ExpectedSellerID string
+}
+
+type ConfirmAlipayPaymentResult struct {
+	UnknownOrder bool
 	Idempotent   bool
 }
 
@@ -306,6 +322,9 @@ func (s *Store) ConfirmWechatPayment(input ConfirmWechatPaymentInput) (ConfirmWe
 		if err != nil {
 			return err
 		}
+		if paymentOrder.PaymentType != epay.PaymentTypeWechat {
+			return tx.recordManualReview(&paymentOrder, "CHANNEL_CROSS_NOTIFY", "WeChat notice claimed a non-WeChat order", "CHANNEL_CROSS_NOTIFY", "WECHAT")
+		}
 		if input.Notice.TradeState != wechat.TradeStateSuccess || input.Notice.MerchantID != input.ExpectedMerchant || input.Notice.AppID != input.ExpectedAppID || input.Notice.AmountFen != paymentOrder.AmountFen || input.Notice.Currency != wechat.CurrencyCNY || input.Notice.WechatOrderNo == "" || input.Notice.NotificationID == "" {
 			return tx.markManualReview(&paymentOrder, "WECHAT_NOTICE_MISMATCH", "WeChat notice does not match the local order")
 		}
@@ -364,7 +383,107 @@ func (s *Store) ConfirmWechatPayment(input ConfirmWechatPaymentInput) (ConfirmWe
 	return result, err
 }
 
+func (s *Store) ConfirmAlipayPayment(input ConfirmAlipayPaymentInput) (ConfirmAlipayPaymentResult, error) {
+	result := ConfirmAlipayPaymentResult{}
+	err := s.Transaction(func(tx *Store) error {
+		var paymentOrder PaymentOrder
+		err := lockForUpdate(tx.db).Where("out_trade_no = ?", input.Notice.MerchantOrderNo).First(&paymentOrder).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			result.UnknownOrder = true
+			metadata := "unknown Alipay merchant order"
+			return tx.db.Create(&PaymentAuditEvent{
+				ID: uuid.NewString(), EventType: "ALIPAY_UNKNOWN_ORDER", ActorType: "ALIPAY", Result: "REJECTED", Metadata: &metadata, CreatedAt: time.Now().UTC(),
+			}).Error
+		}
+		if err != nil {
+			return err
+		}
+		if paymentOrder.PaymentType != epay.PaymentTypeAlipay {
+			return tx.recordManualReview(&paymentOrder, "CHANNEL_CROSS_NOTIFY", "Alipay notice claimed a non-Alipay order", "CHANNEL_CROSS_NOTIFY", "ALIPAY")
+		}
+		if !alipayAmountMatches(paymentOrder, input) {
+			return tx.recordManualReview(&paymentOrder, "ALIPAY_NOTICE_MISMATCH", "Alipay notice does not match the local order", "ALIPAY_NOTICE_MISMATCH", "ALIPAY")
+		}
+		if order.IsPaid(paymentOrder.Status) {
+			if paymentOrder.AlipayTradeNo != nil && *paymentOrder.AlipayTradeNo == input.Notice.TradeNo {
+				result.Idempotent = true
+				return nil
+			}
+			return tx.recordManualReview(&paymentOrder, "ALIPAY_TRANSACTION_CONFLICT", "Alipay trade number conflicts with an already paid order", "ALIPAY_NOTICE_MISMATCH", "ALIPAY")
+		}
+		if paymentOrder.Status != order.StatusPayable && paymentOrder.Status != order.StatusCreateUnknown {
+			return tx.recordManualReview(&paymentOrder, "ALIPAY_UNEXPECTED_ORDER_STATE", "Alipay payment arrived in an unexpected order state", "ALIPAY_NOTICE_MISMATCH", "ALIPAY")
+		}
+		if err := order.ValidateTransition(paymentOrder.Status, order.StatusPaidPendingNotify); err != nil {
+			return err
+		}
+		tradeNo := input.Notice.TradeNo
+		paidAt := time.Now().UTC()
+		updates := map[string]any{
+			"status":             order.StatusPaidPendingNotify,
+			"alipay_trade_no":    &tradeNo,
+			"paid_at":            &paidAt,
+			"last_error_code":    nil,
+			"last_error_message": nil,
+			"version":            paymentOrder.Version + 1,
+		}
+		if input.Notice.NotifyID != "" {
+			notifyID := input.Notice.NotifyID
+			updates["alipay_notify_id"] = &notifyID
+		}
+		write := tx.db.Model(&PaymentOrder{}).Where("id = ? AND status = ? AND version = ?", paymentOrder.ID, paymentOrder.Status, paymentOrder.Version).Updates(updates)
+		if write.Error != nil {
+			return write.Error
+		}
+		if write.RowsAffected != 1 {
+			return errors.New("payment order changed while confirming Alipay payment")
+		}
+		if tx.confirmPaymentHook != nil {
+			if err := tx.confirmPaymentHook(); err != nil {
+				return err
+			}
+		}
+		if err := tx.createPaidNotificationTask(paymentOrder, tradeNo); err != nil {
+			return err
+		}
+		orderID := paymentOrder.ID
+		metadata := "alipay payment confirmed"
+		return tx.db.Create(&PaymentAuditEvent{ID: uuid.NewString(), OrderID: &orderID, EventType: "ALIPAY_PAYMENT_CONFIRMED", ActorType: "ALIPAY", Result: "SUCCESS", Metadata: &metadata, CreatedAt: time.Now().UTC()}).Error
+	})
+	return result, err
+}
+
+func alipayAmountMatches(paymentOrder PaymentOrder, input ConfirmAlipayPaymentInput) bool {
+	if !alipay.PaidTradeStatus(input.Notice.TradeStatus) || input.Notice.AppID != input.ExpectedAppID || input.Notice.TradeNo == "" {
+		return false
+	}
+	if input.ExpectedSellerID != "" && input.Notice.SellerID != input.ExpectedSellerID {
+		return false
+	}
+	amountFen, amountText, err := order.ParseAmountFen(input.Notice.TotalAmount, paymentOrder.AmountText)
+	if err != nil {
+		return false
+	}
+	return amountFen == paymentOrder.AmountFen && amountText == paymentOrder.AmountText
+}
+
+func (s *Store) createPaidNotificationTask(paymentOrder PaymentOrder, tradeNo string) error {
+	payload, err := json.Marshal(NotificationPayload{
+		PartnerID: paymentOrder.EpayPID, PaymentType: paymentOrder.PaymentType, MerchantOrderNo: paymentOrder.OutTradeNo,
+		GatewayTradeNo: tradeNo, Subject: paymentOrder.Subject, AmountText: paymentOrder.AmountText,
+	})
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	return s.db.Create(&NotificationTask{ID: uuid.NewString(), OrderID: paymentOrder.ID, State: order.NotificationPending, PayloadSnapshot: string(payload), NextAttemptAt: now, Version: 1}).Error
+}
+
 func (s *Store) markManualReview(paymentOrder *PaymentOrder, code, message string) error {
+	return s.recordManualReview(paymentOrder, code, message, "WECHAT_NOTICE_REVIEW", "WECHAT")
+}
+
+func (s *Store) recordManualReview(paymentOrder *PaymentOrder, code, message, eventType, actorType string) error {
 	if paymentOrder.Status != order.StatusManualReview {
 		if err := order.ValidateTransition(paymentOrder.Status, order.StatusManualReview); err != nil {
 			return err
@@ -379,7 +498,7 @@ func (s *Store) markManualReview(paymentOrder *PaymentOrder, code, message strin
 		}
 	}
 	orderID := paymentOrder.ID
-	return s.db.Create(&PaymentAuditEvent{ID: uuid.NewString(), OrderID: &orderID, EventType: "WECHAT_NOTICE_REVIEW", ActorType: "WECHAT", Result: "REJECTED", CreatedAt: time.Now().UTC()}).Error
+	return s.db.Create(&PaymentAuditEvent{ID: uuid.NewString(), OrderID: &orderID, EventType: eventType, ActorType: actorType, Result: "REJECTED", CreatedAt: time.Now().UTC()}).Error
 }
 
 // NotificationPayload is the immutable Epay callback input captured with the payment fact.
@@ -509,9 +628,14 @@ func (s *Store) UpdateNativeOrder(record order.NativeOrderRecord, update order.N
 	updates := map[string]any{
 		"status":             update.Status,
 		"version":            record.Version + 1,
-		"wechat_code_url":    update.CodeURL,
 		"last_error_code":    update.ErrorCode,
 		"last_error_message": update.ErrorMessage,
+	}
+	if update.CodeURL != nil {
+		updates["wechat_code_url"] = update.CodeURL
+	}
+	if update.AlipayQRCode != nil {
+		updates["alipay_qr_code"] = update.AlipayQRCode
 	}
 	result := s.db.Model(&PaymentOrder{}).
 		Where("id = ? AND status = ? AND version = ?", record.ID, record.Status, record.Version).
@@ -538,7 +662,7 @@ func (s *Store) FindCreateUnknownOrders(limit int) ([]order.NativeOrderRecord, e
 	for _, paymentOrder := range paymentOrders {
 		records = append(records, order.NativeOrderRecord{
 			ID: paymentOrder.ID, OutTradeNo: paymentOrder.OutTradeNo, Subject: paymentOrder.Subject, AmountFen: paymentOrder.AmountFen,
-			NotifyURL: paymentOrder.NotifyURL, ExpiresAt: paymentOrder.ExpiresAt, Status: paymentOrder.Status,
+			AmountText: paymentOrder.AmountText, PaymentType: paymentOrder.PaymentType, NotifyURL: paymentOrder.NotifyURL, ExpiresAt: paymentOrder.ExpiresAt, Status: paymentOrder.Status,
 			Version: paymentOrder.Version, CreatedAt: paymentOrder.CreatedAt,
 		})
 	}
@@ -546,7 +670,34 @@ func (s *Store) FindCreateUnknownOrders(limit int) ([]order.NativeOrderRecord, e
 }
 
 func Migrate(db *gorm.DB) error {
-	return db.AutoMigrate(&PaymentOrder{}, &NotificationTask{}, &PaymentAuditEvent{})
+	if err := db.AutoMigrate(&PaymentOrder{}, &NotificationTask{}, &PaymentAuditEvent{}); err != nil {
+		return err
+	}
+	return EnsureAlipayOrderColumns(db)
+}
+
+func EnsureAlipayOrderColumns(db *gorm.DB) error {
+	migrator := db.Migrator()
+	columns := []string{"AlipayQrCode", "AlipayTradeNo", "AlipayNotifyID"}
+	for _, column := range columns {
+		if migrator.HasColumn(&PaymentOrder{}, column) {
+			continue
+		}
+		if err := migrator.AddColumn(&PaymentOrder{}, column); err != nil {
+			return err
+		}
+	}
+	indexes := []string{"idx_payment_orders_alipay_trade_no", "idx_payment_orders_alipay_notify_id"}
+	fields := []string{"AlipayTradeNo", "AlipayNotifyID"}
+	for i, name := range indexes {
+		if migrator.HasIndex(&PaymentOrder{}, name) {
+			continue
+		}
+		if err := migrator.CreateIndex(&PaymentOrder{}, fields[i]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // lockForUpdate emits row locks only on dialects that support the syntax.

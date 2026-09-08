@@ -89,15 +89,17 @@ func (handler *AdminHandler) RetryNotification(context *gin.Context) {
 
 func containsSensitiveAuditValue(value string) bool {
 	lower := strings.ToLower(value)
-	return strings.Contains(lower, "://") || strings.Contains(lower, "token") || strings.Contains(lower, "secret") || strings.Contains(lower, "password") || strings.Contains(lower, "signature") || strings.Contains(lower, "code_url") || strings.Contains(lower, "epay_key") || strings.Contains(lower, "api_v3")
+	return strings.Contains(lower, "://") || strings.Contains(lower, "token") || strings.Contains(lower, "secret") || strings.Contains(lower, "password") || strings.Contains(lower, "signature") || strings.Contains(lower, "code_url") || strings.Contains(lower, "qr_code") || strings.Contains(lower, "epay_key") || strings.Contains(lower, "api_v3") || strings.Contains(lower, "private_key")
 }
 
 func adminOrderResponse(view admin.OrderView) AdminOrderResponse {
 	response := AdminOrderResponse{
 		MerchantOrder:     view.Order.OutTradeNo,
+		PaymentType:       view.Order.PaymentType,
 		Status:            string(view.Order.Status),
 		Amount:            view.Order.AmountText,
 		WechatOrderMasked: view.WechatTransactionMask,
+		AlipayOrderMasked: view.AlipayTransactionMask,
 		CreatedAt:         view.Order.CreatedAt,
 		PaidAt:            view.Order.PaidAt,
 		NotifiedAt:        view.Order.NotifiedAt,

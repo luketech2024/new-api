@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>游乐场改动对照 · 给客户确认</title>
+  <style>
+    :root {
+      --bg: #f4f4f5;
+      --card: #fff;
+      --border: #e4e4e7;
+      --text: #18181b;
+      --muted: #71717a;
+      --now: #a1a1aa;
+      --after: #2563eb;
+      --danger: #dc2626;
+      --ok: #16a34a;
+      --sidebar: #fafafa;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: ui-sans-serif, system-ui, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+    header {
+      background: #fff; border-bottom: 1px solid var(--border);
+      padding: 16px 24px; position: sticky; top: 0; z-index: 2;
+    }
+    header h1 { margin: 0 0 6px; font-size: 18px; }
+    header p { margin: 0; color: var(--muted); font-size: 13px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px; max-width: 1400px; margin: 0 auto; }
+    @media (max-width: 960px) { .grid { grid-template-columns: 1fr; } }
+    .pane { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; min-height: 560px; display: flex; flex-direction: column; }
+    .pane-h { padding: 10px 14px; font-size: 13px; font-weight: 700; letter-spacing: .04em; }
+    .pane.now .pane-h { background: #f4f4f5; color: #52525b; }
+    .pane.after .pane-h { background: #eff6ff; color: var(--after); }
+    .shell { display: flex; flex: 1; min-height: 0; }
+    .nav { width: 132px; background: var(--sidebar); border-right: 1px solid var(--border); padding: 12px 8px; font-size: 12px; color: var(--muted); }
+    .nav .on { color: var(--text); font-weight: 600; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
+    .nav div { padding: 8px; }
+    .main { flex: 1; display: flex; flex-direction: column; padding: 12px; gap: 10px; }
+    .row { display: flex; gap: 8px; align-items: center; }
+    select, textarea, input, button { font: inherit; }
+    select, input { border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; background: #fff; }
+    textarea { width: 100%; min-height: 72px; border: 1px solid var(--border); border-radius: 10px; padding: 10px; resize: none; }
+    .bubble { max-width: 86%; border-radius: 12px; padding: 10px 12px; font-size: 13px; line-height: 1.5; }
+    .user { align-self: flex-end; background: #18181b; color: #fff; }
+    .bot { align-self: flex-start; background: #f4f4f5; }
+    .err { background: #fef2f2; color: var(--danger); border: 1px solid #fecaca; }
+    .ok { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+    .chat { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+    .imgbox { background: #e4e4e7; height: 140px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; }
+    .vid { background: #18181b; color: #fff; height: 140px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+    .hint { font-size: 12px; color: var(--muted); }
+    .badge { font-size: 11px; padding: 2px 6px; border-radius: 999px; background: #dbeafe; color: #1d4ed8; }
+    .tabs { display: flex; gap: 6px; }
+    .tabs span { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); }
+    .tabs .cur { background: #18181b; color: #fff; border-color: #18181b; }
+    footer {
+      max-width: 1400px; margin: 0 auto 24px; padding: 0 16px;
+    }
+    .ask { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; }
+    .ask h2 { margin: 0 0 8px; font-size: 15px; }
+    label { display: block; margin: 8px 0; font-size: 14px; }
+    .note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>改动 A · 游乐场支持图片 / 视频试玩</h1>
+    <p>左栏是现在线上体验，右栏是拟交付。请往下滚动勾选是否同意。本页不接真实接口。</p>
+  </header>
+  <div class="grid">
+    <section class="pane now">
+      <div class="pane-h">现在 · 只能聊天</div>
+      <div class="shell">
+        <aside class="nav">
+          <div class="on">游乐场</div>
+          <div>钱包</div>
+          <div>日志</div>
+        </aside>
+        <div class="main">
+          <div class="row">
+            <span class="hint">模型</span>
+            <select disabled>
+              <option>gpt-4o</option>
+              <option selected>dall-e-3（图片）</option>
+              <option>sora（视频）</option>
+            </select>
+            <span class="hint">扁平名单，看不出类型</span>
+          </div>
+          <div class="chat">
+            <div class="bubble user">画一只戴帽子的猫</div>
+            <div class="bubble bot err">请求失败：该模型不是聊天接口。用户只能自己去调 API。</div>
+          </div>
+          <textarea disabled>继续输入… 附件按钮显示「功能开发中」</textarea>
+          <p class="hint">问题：选了图片/视频模型，界面仍按对话提交。</p>
+        </div>
+      </div>
+    </section>
+    <section class="pane after">
+      <div class="pane-h">改后 · 按模型切换工作台</div>
+      <div class="shell">
+        <aside class="nav">
+          <div class="on">游乐场</div>
+          <div>钱包</div>
+          <div>日志</div>
+        </aside>
+        <div class="main">
+          <div class="row">
+            <span class="hint">模型</span>
+            <select disabled>
+              <optgroup label="对话">
+                <option>gpt-4o</option>
+              </optgroup>
+              <optgroup label="绘图">
+                <option selected>dall-e-3</option>
+              </optgroup>
+              <optgroup label="视频">
+                <option>sora</option>
+              </optgroup>
+            </select>
+            <span class="badge">绘图</span>
+          </div>
+          <div class="tabs">
+            <span>对话</span>
+            <span class="cur">绘图</span>
+            <span>视频</span>
+          </div>
+          <div class="chat">
+            <div class="bubble user">画一只戴帽子的猫</div>
+            <div class="bubble bot ok">
+              已出图（示意）
+              <div class="imgbox">图片结果</div>
+              <div class="hint" style="margin-top:6px">按正式 API 规则扣减额度</div>
+            </div>
+          </div>
+          <textarea disabled>提示词、张数、尺寸（对话参数已隐藏）</textarea>
+          <p class="hint">视频模型：提交后显示进行中，完成后可播放，可能等待数十秒。</p>
+        </div>
+      </div>
+    </section>
+  </div>
+  <footer>
+    <div class="ask">
+      <h2>请客户确认（建议项已预选，可改）</h2>
+      <label><input type="checkbox" checked /> 试玩扣真实额度，规则与正式 API 相同</label>
+      <label><input type="checkbox" checked /> 首期只做文生图 + 文生视频（不做图生视频、不做聊天贴图）</label>
+      <label><input type="checkbox" checked /> 视频生成等待数十秒可接受，页面显示进度即可</label>
+      <label><input type="checkbox" checked /> 不新开菜单，仍用现有「游乐场」</label>
+      <p class="note">不做：独立绘图站、Kling/即梦专用页、改对外 API。可行性：可行，复用已有出图/出视频能力。</p>
+    </div>
+  </footer>
+</body>
+</html>

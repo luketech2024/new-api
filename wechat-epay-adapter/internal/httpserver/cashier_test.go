@@ -20,6 +20,11 @@ import (
 
 func newCashierRouter(t *testing.T, status order.Status, codeURL *string) (*gin.Engine, string) {
 	t.Helper()
+	return newCashierRouterWithChannel(t, "wxpay", status, codeURL, nil)
+}
+
+func newCashierRouterWithChannel(t *testing.T, paymentType string, status order.Status, wechatCodeURL, alipayQRCode *string) (*gin.Engine, string) {
+	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, store.Migrate(db))
@@ -28,9 +33,9 @@ func newCashierRouter(t *testing.T, status order.Status, codeURL *string) (*gin.
 	returnURL := "https://app.example.com/console/billing"
 	paymentOrder := store.PaymentOrder{
 		ID: "cashier-order", OutTradeNo: "cashier-out-trade-no", GatewayTradeNo: "cashier-gateway", RequestFingerprint: "cashier-fingerprint",
-		EpayPID: "10001", PaymentType: "wxpay", Subject: "Top up", AmountText: "1.00", AmountFen: 100,
+		EpayPID: "10001", PaymentType: paymentType, Subject: "Top up", AmountText: "1.00", AmountFen: 100,
 		NotifyURL: "https://pay.example.com/api/v1/wechat/notify", ReturnURL: &returnURL, CashierTokenHash: order.HashCashierToken(token),
-		Status: status, WechatCodeURL: codeURL, ExpiresAt: time.Now().UTC().Add(10 * time.Minute), Version: 1,
+		Status: status, WechatCodeURL: wechatCodeURL, AlipayQrCode: alipayQRCode, ExpiresAt: time.Now().UTC().Add(10 * time.Minute), Version: 1,
 	}
 	require.NoError(t, database.DB().Create(&paymentOrder).Error)
 	policy, err := order.NewReturnURLPolicy("https://app.example.com/console/", func(context.Context, string) ([]net.IP, error) {
@@ -81,7 +86,7 @@ func TestCashierStatusIsReadOnlyAndRedirectsOnlyAfterNotification(t *testing.T) 
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/cashier/"+token+"/status", nil))
 
 	require.Equal(t, http.StatusOK, response.Code)
-	assert.JSONEq(t, `{"out_trade_no":"cashier-out-trade-no","subject":"Top up","amount":"1.00","status":"NOTIFIED","redirect_allowed":true,"return_url":"https://app.example.com/console/billing"}`, withoutTimes(response.Body.String()))
+	assert.JSONEq(t, `{"out_trade_no":"cashier-out-trade-no","payment_type":"wxpay","subject":"Top up","amount":"1.00","status":"NOTIFIED","redirect_allowed":true,"return_url":"https://app.example.com/console/billing"}`, withoutTimes(response.Body.String()))
 	assert.NotContains(t, response.Body.String(), "code_url")
 	assert.Equal(t, "no-store", response.Header().Get("Cache-Control"))
 }
@@ -109,4 +114,29 @@ func withoutTimes(body string) string {
 		return body
 	}
 	return string(result)
+}
+
+func TestCashierAlipayPageDoesNotRenderWechatQR(t *testing.T) {
+	wechatURL := "weixin://wxpay/bizpayurl?pr=payment-code"
+	alipayURL := "https://qr.alipay.com/bax0001"
+	router, token := newCashierRouterWithChannel(t, "alipay", order.StatusPayable, &wechatURL, &alipayURL)
+
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/cashier/"+token, nil))
+
+	require.Equal(t, http.StatusOK, response.Code)
+	assert.Contains(t, response.Body.String(), "请使用支付宝扫码完成支付")
+	assert.Contains(t, response.Body.String(), "ALIPAY")
+	assert.Contains(t, response.Body.String(), "#1677ff")
+	assert.Contains(t, response.Body.String(), "等待支付宝支付")
+	assert.NotContains(t, response.Body.String(), "请使用微信扫码完成支付")
+	assert.NotContains(t, response.Body.String(), "WECHAT PAY")
+
+	status := httptest.NewRecorder()
+	router.ServeHTTP(status, httptest.NewRequest(http.MethodGet, "/api/v1/cashier/"+token+"/status", nil))
+	require.Equal(t, http.StatusOK, status.Code)
+	assert.Contains(t, status.Body.String(), `"payment_type":"alipay"`)
+	assert.NotContains(t, status.Body.String(), "weixin://")
+	assert.NotContains(t, status.Body.String(), "qr.alipay.com")
+	assert.NotContains(t, status.Body.String(), "alipay_trade_no")
 }

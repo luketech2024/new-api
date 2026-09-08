@@ -32,6 +32,14 @@ func TestVerifyRejectsTamperedField(t *testing.T) {
 	assert.False(t, Verify(params, "shared-secret"))
 }
 
+func TestAllowedPaymentType_WechatOrAlipay_AcceptsKnownChannels(t *testing.T) {
+	assert.True(t, AllowedPaymentType(PaymentTypeWechat))
+	assert.True(t, AllowedPaymentType(PaymentTypeAlipay))
+	assert.False(t, AllowedPaymentType(""))
+	assert.False(t, AllowedPaymentType("qqpay"))
+	assert.Equal(t, "alipay", PaymentTypeAlipay)
+}
+
 func TestCallbackAcceptedRequiresTwoHundredResponseAndSuccessBody(t *testing.T) {
 	tests := []struct {
 		name   string

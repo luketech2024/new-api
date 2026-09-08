@@ -20,6 +20,12 @@ type Metrics struct {
 	store    *store.Store
 	mu       sync.Mutex
 	requests map[requestMetricKey]requestMetric
+	channel  map[channelMetricKey]uint64
+}
+
+type channelMetricKey struct {
+	Channel string
+	Event   string
 }
 
 type requestMetricKey struct {
@@ -50,7 +56,7 @@ type dailyLogWriter struct {
 }
 
 func NewMetrics(database *store.Store) *Metrics {
-	return &Metrics{store: database, requests: make(map[requestMetricKey]requestMetric)}
+	return &Metrics{store: database, requests: make(map[requestMetricKey]requestMetric), channel: make(map[channelMetricKey]uint64)}
 }
 
 func NewLogger(level, logDir string) (*Logger, error) {
@@ -114,6 +120,20 @@ func (w *dailyLogWriter) rotateLocked(forceNextFile bool) error {
 	return nil
 }
 
+func (m *Metrics) ObserveChannel(channel, event string) {
+	if channel != "wxpay" && channel != "alipay" {
+		channel = "unknown"
+	}
+	switch event {
+	case "created", "paid", "notify_fail", "review", "backlog", "verify_fail":
+	default:
+		event = "other"
+	}
+	m.mu.Lock()
+	m.channel[channelMetricKey{Channel: channel, Event: event}]++
+	m.mu.Unlock()
+}
+
 func (m *Metrics) ObserveRequest(route, method string, status int, duration time.Duration) {
 	if route == "" {
 		route = "unmatched"
@@ -158,8 +178,19 @@ func (m *Metrics) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {
 	for _, count := range taskCounts {
 		fmt.Fprintf(&output, "notification_tasks_pending{state=%q} %d\n", count.State, count.Count)
 	}
-	output.WriteString("# HELP http_request_duration_seconds HTTP request duration.\n# TYPE http_request_duration_seconds summary\n")
+	output.WriteString("# HELP payment_channel_events Payment adapter events by channel.\n# TYPE payment_channel_events counter\n")
 	m.mu.Lock()
+	channelKeys := make([]channelMetricKey, 0, len(m.channel))
+	for key := range m.channel {
+		channelKeys = append(channelKeys, key)
+	}
+	sort.Slice(channelKeys, func(i, j int) bool {
+		return channelKeys[i].Channel+channelKeys[i].Event < channelKeys[j].Channel+channelKeys[j].Event
+	})
+	for _, key := range channelKeys {
+		fmt.Fprintf(&output, "payment_channel_events{channel=%q,event=%q} %d\n", key.Channel, key.Event, m.channel[key])
+	}
+	output.WriteString("# HELP http_request_duration_seconds HTTP request duration.\n# TYPE http_request_duration_seconds summary\n")
 	keys := make([]requestMetricKey, 0, len(m.requests))
 	for key := range m.requests {
 		keys = append(keys, key)

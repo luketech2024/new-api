@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/alipay"
 	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/config"
 	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/database"
 	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/delivery"
@@ -45,17 +46,28 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	var alipayClient alipay.Client
+	if appConfig.AlipayEnabled {
+		client, err := alipay.NewSDKClient(appConfig)
+		if err != nil {
+			return err
+		}
+		alipayClient = client
+	}
 	databaseStore := store.New(db)
 	metrics := observability.NewMetrics(databaseStore)
 	logger, err := observability.NewLogger(appConfig.LogLevel, appConfig.LogDir)
 	if err != nil {
 		return err
 	}
-	router := httpserver.New(db, httpserver.SecurityOptions{TrustedProxies: appConfig.TrustedProxyCIDRs, RequestObserver: metrics, RequestLogger: logger})
-	if err := httpserver.RegisterSubmitRoute(router, databaseStore, appConfig, wechatClient); err != nil {
+	router := httpserver.New(db, httpserver.SecurityOptions{
+		TrustedProxies: appConfig.TrustedProxyCIDRs, RequestObserver: metrics, RequestLogger: logger,
+		ReadyCheck: appConfig.ValidateAlipay,
+	})
+	httpserver.RegisterMetricsRoute(router, metrics, appConfig.MetricsAPIToken)
+	if err := httpserver.RegisterSubmitRoute(router, databaseStore, appConfig, wechatClient, alipayClient, metrics); err != nil {
 		return err
 	}
-	httpserver.RegisterMetricsRoute(router, metrics, appConfig.MetricsAPIToken)
 
 	server := &http.Server{
 		Addr:              appConfig.ListenAddr,
@@ -74,7 +86,11 @@ func run() error {
 		}
 		go worker.Run(shutdownContext)
 	}
-	go order.NewRecoveryScheduler(databaseStore, order.NewNativeOrderService(databaseStore, wechatClient)).Run(shutdownContext)
+	var precreate *order.PrecreateService
+	if alipayClient != nil {
+		precreate = order.NewPrecreateService(databaseStore, alipayClient)
+	}
+	go order.NewRecoveryScheduler(databaseStore, order.NewNativeOrderService(databaseStore, wechatClient), precreate).Run(shutdownContext)
 
 	errChan := make(chan error, 1)
 	go func() {

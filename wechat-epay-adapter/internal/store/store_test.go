@@ -50,6 +50,11 @@ func TestMigrateCreatesRequiredIndexes(t *testing.T) {
 	assert.True(t, migrator.HasIndex(&PaymentOrder{}, "idx_payment_orders_status_updated_at"))
 	assert.True(t, migrator.HasIndex(&NotificationTask{}, "idx_notification_tasks_state_next_attempt_at"))
 	assert.True(t, migrator.HasIndex(&NotificationTask{}, "idx_notification_tasks_state_lease_until"))
+	assert.True(t, migrator.HasColumn(&PaymentOrder{}, "AlipayQrCode"))
+	assert.True(t, migrator.HasColumn(&PaymentOrder{}, "AlipayTradeNo"))
+	assert.True(t, migrator.HasColumn(&PaymentOrder{}, "AlipayNotifyID"))
+	assert.True(t, migrator.HasIndex(&PaymentOrder{}, "idx_payment_orders_alipay_trade_no"))
+	assert.True(t, migrator.HasIndex(&PaymentOrder{}, "idx_payment_orders_alipay_notify_id"))
 }
 
 func TestPaymentOrderUniqueFieldsRejectDuplicates(t *testing.T) {

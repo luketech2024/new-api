@@ -3,6 +3,8 @@ package order
 import (
 	"context"
 	"time"
+
+	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/epay"
 )
 
 const unknownCreateScanLimit = 100
@@ -15,11 +17,12 @@ type RecoveryRepository interface {
 type RecoveryScheduler struct {
 	repository RecoveryRepository
 	native     *NativeOrderService
+	precreate  *PrecreateService
 	now        func() time.Time
 }
 
-func NewRecoveryScheduler(repository RecoveryRepository, native *NativeOrderService) *RecoveryScheduler {
-	return &RecoveryScheduler{repository: repository, native: native, now: func() time.Time { return time.Now().UTC() }}
+func NewRecoveryScheduler(repository RecoveryRepository, native *NativeOrderService, precreate *PrecreateService) *RecoveryScheduler {
+	return &RecoveryScheduler{repository: repository, native: native, precreate: precreate, now: func() time.Time { return time.Now().UTC() }}
 }
 
 func (scheduler *RecoveryScheduler) Run(ctx context.Context) {
@@ -46,6 +49,18 @@ func (scheduler *RecoveryScheduler) Process(ctx context.Context) error {
 		return err
 	}
 	for _, record := range records {
+		if record.PaymentType == epay.PaymentTypeAlipay {
+			if scheduler.precreate == nil {
+				continue
+			}
+			if err := scheduler.precreate.RecoverUnknown(ctx, record); err != nil {
+				return err
+			}
+			continue
+		}
+		if scheduler.native == nil {
+			continue
+		}
 		if err := scheduler.native.RecoverUnknown(ctx, record); err != nil {
 			return err
 		}

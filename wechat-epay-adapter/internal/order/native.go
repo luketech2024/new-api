@@ -8,26 +8,30 @@ import (
 	"strings"
 	"time"
 
+	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/epay"
 	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/wechat"
 )
 
 const UnknownCreateObservationWindow = 15 * time.Minute
 
 type NativeOrderRecord struct {
-	ID         string
-	OutTradeNo string
-	Subject    string
-	AmountFen  int64
-	NotifyURL  string
-	ExpiresAt  time.Time
-	Status     Status
-	Version    int64
-	CreatedAt  time.Time
+	ID          string
+	OutTradeNo  string
+	Subject     string
+	AmountFen   int64
+	AmountText  string
+	PaymentType string
+	NotifyURL   string
+	ExpiresAt   time.Time
+	Status      Status
+	Version     int64
+	CreatedAt   time.Time
 }
 
 type NativeOrderUpdate struct {
 	Status       Status
 	CodeURL      *string
+	AlipayQRCode *string
 	ErrorCode    *string
 	ErrorMessage *string
 }
@@ -69,6 +73,9 @@ func (service *NativeOrderService) Create(ctx context.Context, record NativeOrde
 }
 
 func (service *NativeOrderService) RecoverUnknown(ctx context.Context, record NativeOrderRecord) error {
+	if record.PaymentType == epay.PaymentTypeAlipay {
+		return nil
+	}
 	if record.Status != StatusCreateUnknown {
 		return nil
 	}

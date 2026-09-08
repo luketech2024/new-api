@@ -76,7 +76,7 @@ func (w *Worker) ProcessOne(ctx context.Context) error {
 		"trade_no": payload.GatewayTradeNo, "name": payload.Subject, "money": payload.AmountText,
 		"trade_status": epay.TradeStatusSuccess, "sign_type": epay.SignTypeMD5,
 	}
-	if payload.PartnerID != w.partnerID || payload.PaymentType != epay.PaymentTypeWechat {
+	if payload.PartnerID != w.partnerID || !epay.AllowedPaymentType(payload.PaymentType) {
 		return w.fail(task, nil, "notification payload does not match configured merchant")
 	}
 	storedDestination, err := w.store.NotifyDestination(task.OrderID)

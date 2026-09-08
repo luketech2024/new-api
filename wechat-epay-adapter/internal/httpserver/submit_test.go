@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/alipay"
 	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/config"
 	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/epay"
 	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/order"
@@ -70,8 +71,12 @@ func (client *submitWechatClient) QueryOrder(context.Context, string) (wechat.Or
 	return wechat.OrderQuery{}, nil
 }
 func signedSubmitForm(subject, outTradeNo, notifyURL string) url.Values {
+	return signedSubmitFormWithType(subject, outTradeNo, notifyURL, "wxpay")
+}
+
+func signedSubmitFormWithType(subject, outTradeNo, notifyURL, paymentType string) url.Values {
 	params := map[string]string{
-		"pid": "10001", "type": "wxpay", "out_trade_no": outTradeNo, "notify_url": notifyURL,
+		"pid": "10001", "type": paymentType, "out_trade_no": outTradeNo, "notify_url": notifyURL,
 		"return_url": "https://app.example.com/console/billing", "name": subject, "money": "1.00", "device": "pc", "sign_type": "MD5",
 	}
 	params["sign"] = epay.Sign(params, "shared-secret")
@@ -180,4 +185,93 @@ func TestSubmitRejectsConflictingOrderAndAuditsIt(t *testing.T) {
 	var audits int64
 	require.NoError(t, database.DB().Model(&store.PaymentAuditEvent{}).Where("event_type = ?", "ORDER_CONFLICT").Count(&audits).Error)
 	assert.Equal(t, int64(1), audits)
+}
+
+type submitAlipayClient struct {
+	request alipay.PrecreateRequest
+}
+
+func (client *submitAlipayClient) Precreate(_ context.Context, request alipay.PrecreateRequest) (alipay.PrecreateOrder, error) {
+	client.request = request
+	return alipay.PrecreateOrder{QRCode: "https://qr.alipay.com/bax0001"}, nil
+}
+
+func (client *submitAlipayClient) Query(context.Context, string) (alipay.OrderQuery, error) {
+	return alipay.OrderQuery{}, nil
+}
+
+func TestSubmitRejectsUnknownPaymentTypeWithoutCreatingOrder(t *testing.T) {
+	router, database := newSubmitRouter(t)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, submitRequest(signedSubmitFormWithType("TUC100", "USR1NO999", walletNotifyURL, "qqpay"), nil))
+	assert.Equal(t, http.StatusForbidden, response.Code)
+	var count int64
+	require.NoError(t, database.DB().Model(&store.PaymentOrder{}).Count(&count).Error)
+	assert.Zero(t, count)
+}
+
+func TestSubmitRejectsAlipayWhenChannelDisabled(t *testing.T) {
+	router, database := newSubmitRouter(t)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, submitRequest(signedSubmitFormWithType("TUC100", "USR1NOALI", walletNotifyURL, "alipay"), nil))
+	assert.Equal(t, http.StatusServiceUnavailable, response.Code)
+	var count int64
+	require.NoError(t, database.DB().Model(&store.PaymentOrder{}).Count(&count).Error)
+	assert.Zero(t, count)
+}
+
+func TestSubmitCreatesAlipayOrderWithoutCallingWechat(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, store.Migrate(db))
+	database := store.New(db)
+	returnPolicy, notifyPolicy := newSubmitPolicies(t)
+	wechatClient := &submitWechatClient{}
+	alipayClient := &submitAlipayClient{}
+	appConfig := newSubmitConfig()
+	appConfig.AlipayEnabled = true
+	appConfig.AlipayNotifyURL = "https://pay.example.com/api/v1/alipay/notify"
+	appConfig.WechatNotifyURL = "https://pay.example.com/api/v1/wechat/notify"
+	handler := NewSubmitHandler(database, appConfig, returnPolicy, notifyPolicy, order.NewNativeOrderService(database, wechatClient))
+	handler.precreate = order.NewPrecreateService(database, alipayClient)
+	router := gin.New()
+	require.NoError(t, applySecurityMiddleware(router, SecurityOptions{}))
+	router.POST(RouteSubmit, handler.Handle)
+
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, submitRequest(signedSubmitFormWithType("TUC100", "USR1NOALI", walletNotifyURL, "alipay"), nil))
+	require.Equal(t, http.StatusSeeOther, response.Code)
+	assert.Equal(t, appConfig.AlipayNotifyURL, alipayClient.request.NotifyURL)
+	assert.Equal(t, "1.00", alipayClient.request.TotalAmount)
+	assert.Empty(t, wechatClient.request.NotifyURL)
+	var created store.PaymentOrder
+	require.NoError(t, database.DB().First(&created, "out_trade_no = ?", "USR1NOALI").Error)
+	assert.Equal(t, "alipay", created.PaymentType)
+	require.NotNil(t, created.AlipayQrCode)
+	assert.Equal(t, "https://qr.alipay.com/bax0001", *created.AlipayQrCode)
+	assert.Nil(t, created.WechatCodeURL)
+}
+
+func TestSubmitRejectsChangingPaymentTypeOnExistingOrder(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, store.Migrate(db))
+	database := store.New(db)
+	returnPolicy, notifyPolicy := newSubmitPolicies(t)
+	appConfig := newSubmitConfig()
+	appConfig.AlipayEnabled = true
+	appConfig.AlipayNotifyURL = "https://pay.example.com/api/v1/alipay/notify"
+	handler := NewSubmitHandler(database, appConfig, returnPolicy, notifyPolicy, order.NewNativeOrderService(database, &submitWechatClient{}))
+	handler.precreate = order.NewPrecreateService(database, &submitAlipayClient{})
+	router := gin.New()
+	require.NoError(t, applySecurityMiddleware(router, SecurityOptions{}))
+	router.POST(RouteSubmit, handler.Handle)
+
+	first := httptest.NewRecorder()
+	router.ServeHTTP(first, submitRequest(signedSubmitFormWithType("TUC100", "USR1NOCHG", walletNotifyURL, "alipay"), nil))
+	require.Equal(t, http.StatusSeeOther, first.Code)
+
+	conflict := httptest.NewRecorder()
+	router.ServeHTTP(conflict, submitRequest(signedSubmitForm("TUC100", "USR1NOCHG", walletNotifyURL), nil))
+	assert.Equal(t, http.StatusConflict, conflict.Code)
 }

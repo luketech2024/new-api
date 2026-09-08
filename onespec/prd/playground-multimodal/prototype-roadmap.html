@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>游乐场优化三期 · 可交互原型（意图切换版）</title>
+<style>
+:root{
+  --bg:#f4f4f5;--card:#fff;--border:#e4e4e7;--text:#18181b;--muted:#71717a;
+  --blue:#2563eb;--danger:#dc2626;--ok:#16a34a;--warn:#b45309;--sidebar:#fafafa;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:ui-sans-serif,system-ui,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text)}
+header{background:#fff;border-bottom:1px solid var(--border);padding:14px 20px;position:sticky;top:0;z-index:20}
+header h1{margin:0 0 4px;font-size:17px}
+header p{margin:0;font-size:12px;color:var(--muted)}
+.tabs{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
+.tab{border:1px solid var(--border);background:#fff;border-radius:999px;padding:6px 14px;font-size:13px;cursor:pointer}
+.tab.on{background:#18181b;color:#fff;border-color:#18181b}
+.wrap{max-width:1360px;margin:0 auto;padding:16px}
+.desc{background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;border-radius:10px;padding:10px 14px;font-size:13px;line-height:1.7;margin-bottom:14px}
+.desc.now{background:#f4f4f5;border-color:#e4e4e7;color:#52525b}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px}
+@media(max-width:1080px){.layout{grid-template-columns:1fr}}
+.pane{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;display:flex;min-height:640px}
+.nav{width:130px;background:var(--sidebar);border-right:1px solid var(--border);padding:12px 8px;font-size:12px;color:var(--muted);flex-shrink:0}
+.nav div{padding:8px;border-radius:8px}
+.nav .on{color:var(--text);font-weight:600;background:#fff;border:1px solid var(--border)}
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.bar{display:flex;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+select,input,textarea,button{font:inherit}
+select,input[type=text]{border:1px solid var(--border);border-radius:8px;padding:6px 8px;background:#fff;max-width:100%}
+.badge{font-size:11px;padding:2px 7px;border-radius:999px;margin-left:4px}
+.b-chat{background:#e0e7ff;color:#3730a3}
+.b-img{background:#fce7f3;color:#9d174d}
+.b-vid{background:#ffedd5;color:#9a3412}
+.b-vis{background:#dcfce7;color:#166534}
+.spacer{flex:1}
+.switch{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.body{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;min-height:0}
+.empty{margin:auto;text-align:center;color:var(--muted);font-size:13px;max-width:360px;line-height:1.8}
+.empty b{display:block;color:var(--text);font-size:15px;margin-bottom:6px}
+.chips{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:10px}
+.chip{border:1px solid var(--border);border-radius:999px;padding:5px 12px;font-size:12px;cursor:pointer;background:#fff}
+.chip:hover{background:#fafafa}
+.msg{max-width:86%;border-radius:12px;padding:9px 12px;font-size:13px;line-height:1.6;white-space:pre-wrap}
+.user{align-self:flex-end;background:#18181b;color:#fff}
+.bot{align-self:flex-start;background:#f4f4f5}
+.raw{align-self:flex-start;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;font-family:ui-monospace,Consolas,monospace;font-size:11.5px;max-width:96%}
+.friendly{align-self:flex-start;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;max-width:96%}
+.friendly .act{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
+.friendly button{border:1px solid #fed7aa;background:#fff;color:#9a3412;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer}
+.meta{font-size:11px;color:var(--muted);align-self:flex-start;margin-top:-4px}
+.foot{border-top:1px solid var(--border);padding:10px 12px}
+.ta{width:100%;min-height:60px;border:1px solid var(--border);border-radius:10px;padding:9px;resize:none}
+.tools{display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap}
+.tool{border:1px solid var(--border);background:#fff;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;color:#3f3f46}
+.tool.on{background:#eff6ff;border-color:#bfdbfe;color:var(--blue)}
+.tool:disabled{opacity:.45;cursor:not-allowed}
+/* 意图切换（豆包式） */
+.modes{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.mode{border:1px solid var(--border);background:#fff;border-radius:999px;padding:5px 13px;font-size:12.5px;cursor:pointer;color:#3f3f46;display:flex;align-items:center;gap:5px}
+.mode.on{background:#18181b;color:#fff;border-color:#18181b}
+.mode.off{border-style:dashed;color:#a1a1aa;background:#fafafa}
+.mode .req{font-size:10.5px;color:#b45309;background:#fef3c7;border-radius:999px;padding:0 6px}
+.tipbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:8px;padding:7px 10px;font-size:12px;margin-bottom:8px}
+.tipbar button{border:1px solid #fed7aa;background:#fff;color:#9a3412;border-radius:8px;padding:3px 10px;font-size:12px;cursor:pointer}
+.send{background:#18181b;color:#fff;border:none;border-radius:8px;padding:7px 18px;font-size:13px;cursor:pointer}
+.send:disabled{background:#d4d4d8;cursor:not-allowed}
+.cost{font-size:11px;color:var(--muted)}
+.params{border-top:1px dashed var(--border);margin-top:8px;padding-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;color:var(--muted)}
+.params label{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.params input{width:70px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.imgcell{aspect-ratio:1;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;background:linear-gradient(135deg,#6366f1,#ec4899)}
+.imgcell.b{background:linear-gradient(135deg,#0ea5e9,#22c55e)}
+.vid{background:#18181b;color:#fff;border-radius:10px;height:170px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;font-size:12px}
+.prog{width:70%;height:6px;background:#3f3f46;border-radius:999px;overflow:hidden}
+.prog i{display:block;height:100%;width:0;background:#22c55e;transition:width .3s}
+.side{display:flex;flex-direction:column;gap:12px}
+.note{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px}
+.note h3{margin:0 0 8px;font-size:14px}
+.note ul{margin:0;padding-left:18px;font-size:12.5px;line-height:1.85;color:#3f3f46}
+.note .bad{color:var(--danger)}
+.note .ok{color:var(--ok)}
+.tagline{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6}
+.hist{font-size:12px;border-bottom:1px solid #f4f4f5;padding:7px 0;display:flex;justify-content:space-between;gap:8px}
+.hist:last-child{border:0}
+.hist .s{color:var(--ok)}
+.hist .f{color:var(--danger)}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px}
+.modal .box{background:#fff;border-radius:12px;padding:16px;max-width:560px;width:100%}
+.modal pre{background:#18181b;color:#e4e4e7;border-radius:8px;padding:12px;font-size:11.5px;overflow:auto;margin:8px 0 0}
+.modal .x{float:right;cursor:pointer;color:var(--muted);border:none;background:none;font-size:16px}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cmp .col{border:1px solid var(--border);border-radius:10px;padding:8px;font-size:12px}
+.cmp .col h5{margin:0 0 6px;font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>游乐场优化 · 三期可交互原型（意图切换版）</h1>
+  <p>定位：控制台里的「试衣间」，确认已开通的模型能不能用、效果如何、扣多少钱。第二期起改为<strong>先选要干什么，再由系统挑模型</strong>。</p>
+  <div class="tabs" id="tabs"></div>
+</header>
+
+<div class="wrap">
+  <div class="desc" id="desc"></div>
+  <div class="layout">
+    <div class="pane">
+      <div class="nav">
+        <div>数据看板</div>
+        <div class="on">游乐场</div>
+        <div>令牌</div>
+        <div>模型广场</div>
+        <div>钱包</div>
+      </div>
+      <div class="main">
+        <div class="bar" id="bar"></div>
+        <div class="body" id="body"></div>
+        <div class="foot" id="foot"></div>
+      </div>
+    </div>
+    <div class="side" id="side"></div>
+  </div>
+</div>
+
+<script>
+// groups：演示网关现实——某些能力只有 vip 分组才有模型
+const MODELS = [
+  {id:'deepseek-v4-flash', name:'deepseek-v4-flash', caps:['chat'],          web:false, groups:['default','vip']},
+  {id:'gpt-4o',            name:'gpt-4o',            caps:['chat','vision'], web:true,  groups:['default','vip']},
+  {id:'gpt-image-1',       name:'gpt-image-1',       caps:['image'],         web:false, groups:['default','vip']},
+  {id:'kling-v1',          name:'kling-v1',          caps:['video'],         web:false, groups:['vip']},
+];
+const GROUPS = ['default','vip'];
+const CAPNAME = {chat:'对话', image:'绘图', video:'视频', vision:'识图'};
+const MODES = [
+  {cap:'chat',  label:'对话',   icon:'💬'},
+  {cap:'image', label:'生图',   icon:'🖼'},
+  {cap:'video', label:'生视频', icon:'🎬'},
+];
+
+const PHASES = [
+  {key:'now', title:'现状', desc:'只有对话工作台，且要用户自己按模型区分。图片/视频模型能选中，提交仍按对话发出去，报原始 JSON。回形针是占位入口，参数全量铺开。<b>试着把模型切到 gpt-image-1 再发送。</b>'},
+  {key:'p1',  title:'第一期 · 修体验债', desc:'先不改交互范式，只把坑填掉：模型带能力标签、选错不让发、报错说人话给下一步、显示预估消耗。附件、联网、参数、清空历史这四个入口全部保留，联网按模型显隐，参数收到「简单模式」开关后仍可打开。'},
+  {key:'p2',  title:'第二期 · 意图切换（豆包式）', desc:'输入框上方是「对话 / 生图 / 生视频」，<b>先选要干什么</b>，系统自动挑当前分组可用的模型并切换工作台。模型下拉降为次要项，只在该意图内筛选。当前分组没有对应模型时按钮置灰并说明原因。'},
+  {key:'p3',  title:'第三期 · 高性价比增强', desc:'在意图切换基础上：对话可传图（Vision）、试玩记录可回看、一键复制 API 示例、可选双模型对比。'},
+];
+
+const state = {};
+PHASES.forEach(p => state[p.key] = {
+  model:'deepseek-v4-flash', group:'default', intent:'chat', simple:true, web:false,
+  msgs:[], busy:false, attach:false, n:2, dur:5, compare:false, notice:null,
+  hist:[{m:'gpt-4o',r:'成功',c:'¥0.03',t:'10:21'},{m:'gpt-image-1',r:'成功',c:'¥0.56',t:'10:18'}]
+});
+let cur = 'now';
+
+const $ = s => document.querySelector(s);
+const intentDriven = k => k === 'p2' || k === 'p3';
+const model = k => MODELS.find(m => m.id === state[k].model) || MODELS[0];
+const mainCap = m => m.caps.includes('video') ? 'video' : m.caps.includes('image') ? 'image' : 'chat';
+const inGroup = (m, g) => m.groups.includes(g);
+const modelsFor = (cap, g) => MODELS.filter(m => m.caps.includes(cap) && inGroup(m, g));
+// 现状与一期停在对话台；二期起由意图决定
+const activeCap = k => intentDriven(k) ? state[k].intent : 'chat';
+
+function renderTabs(){
+  $('#tabs').innerHTML = PHASES.map(p =>
+    `<button class="tab ${p.key===cur?'on':''}" data-k="${p.key}">${p.title}</button>`).join('');
+  document.querySelectorAll('.tab').forEach(b => b.onclick = () => { cur = b.dataset.k; render(); });
+}
+
+function renderBar(){
+  const k = cur, s = state[k], m = model(k);
+  // 二期起模型下拉只列「当前意图 + 当前分组」可用的模型
+  const list = intentDriven(k) ? modelsFor(s.intent, s.group) : MODELS;
+  const showBadge = k !== 'now';
+  const opts = list.map(x => {
+    const tag = (showBadge && !intentDriven(k)) ? ` [${x.caps.map(c=>CAPNAME[c]).join('/')}]` : '';
+    return `<option value="${x.id}" ${x.id===s.model?'selected':''}>${x.name}${tag}</option>`;
+  }).join('') || `<option>当前分组无可用模型</option>`;
+  const badges = (showBadge && !intentDriven(k)) ? m.caps.map(c =>
+    `<span class="badge b-${c==='chat'?'chat':c==='image'?'img':c==='video'?'vid':'vis'}">${CAPNAME[c]}</span>`).join('') : '';
+  const label = intentDriven(k) ? `<span class="cost">模型（可选）</span>` : '';
+  const modeSwitch = k === 'now' ? '' :
+    `<div class="switch"><input type="checkbox" id="simple" ${s.simple?'checked':''}/><label for="simple">简单模式</label></div>`;
+  const cmp = k === 'p3' ?
+    `<div class="switch"><input type="checkbox" id="cmp" ${s.compare?'checked':''}/><label for="cmp">双模型对比</label></div>` : '';
+
+  $('#bar').innerHTML = `
+    <select id="group">
+      <option value="default" ${s.group==='default'?'selected':''}>default</option>
+      <option value="vip" ${s.group==='vip'?'selected':''}>vip</option>
+    </select>
+    ${label}<select id="model">${opts}</select>${badges}
+    <div class="spacer"></div>${cmp}${modeSwitch}`;
+
+  $('#group').onchange = e => {
+    s.group = e.target.value;
+    s.notice = null;
+    if (intentDriven(k)) syncModel(k);
+    render();
+  };
+  $('#model').onchange = e => { s.model = e.target.value; s.msgs = []; render(); };
+  if ($('#simple')) $('#simple').onchange = e => { s.simple = e.target.checked; render(); };
+  if ($('#cmp'))    $('#cmp').onchange    = e => { s.compare = e.target.checked; render(); };
+}
+
+// 意图或分组变化后，自动挑一个可用模型
+function syncModel(k){
+  const s = state[k];
+  const list = modelsFor(s.intent, s.group);
+  if (!list.some(m => m.id === s.model)) s.model = list.length ? list[0].id : '';
+}
+
+function bubble(msg){
+  if (msg.type === 'raw')      return `<div class="msg raw">${msg.text}</div>`;
+  if (msg.type === 'friendly') return `<div class="msg friendly">${msg.text}
+      <div class="act">${(msg.acts||[]).map(a=>`<button>${a}</button>`).join('')}</div></div>`;
+  if (msg.type === 'images')   return `<div class="grid2">${
+      Array.from({length:msg.n},(_,i)=>`<div class="imgcell ${i%2?'b':''}">生成图 ${i+1}</div>`).join('')}</div>
+      <div class="meta">${msg.model} · 已扣 ¥${(msg.n*0.28).toFixed(2)} · 可下载</div>`;
+  if (msg.type === 'video')    return `<div class="vid">▶ 视频已生成（${msg.dur}s）</div>
+      <div class="meta">${msg.model} · 已扣 ¥${(msg.dur*0.9).toFixed(2)} · 可下载</div>`;
+  if (msg.type === 'progress') return `<div class="vid">生成中… 约需 30 秒
+      <div class="prog"><i style="width:${msg.p}%"></i></div></div>`;
+  const att = msg.att ? `<div class="meta" style="align-self:flex-end">📎 已附图片</div>` : '';
+  const meta = msg.cost ? `<div class="meta">${msg.cost}</div>` : '';
+  return `<div class="msg ${msg.role==='user'?'user':'bot'}">${msg.text}</div>${att}${meta}`;
+}
+
+function renderBody(){
+  const k = cur, s = state[k], cap = activeCap(k);
+  const el = $('#body');
+
+  if (k === 'p3' && s.compare){
+    el.innerHTML = `<div class="cmp">
+      <div class="col"><h5>gpt-4o</h5>响应更简洁，1.2s，¥0.03</div>
+      <div class="col"><h5>deepseek-v4-flash</h5>更快，0.7s，¥0.01</div></div>
+      <div class="meta">同一提示词并排对比，便于选模型与调渠道。</div>`;
+    return;
+  }
+  if (s.msgs.length){ el.innerHTML = s.msgs.map(bubble).join(''); el.scrollTop = el.scrollHeight; return; }
+
+  if (cap === 'image')
+    el.innerHTML = `<div class="empty"><b>生图</b>已切换到文生图，系统自动选用当前分组可用的绘图模型。<br/>输入提示词并选择张数，图片当场展示可下载。
+      <div class="chips"><span class="chip">水墨风格的城市夜景</span><span class="chip">科技感产品海报</span></div></div>`;
+  else if (cap === 'video')
+    el.innerHTML = `<div class="empty"><b>生视频</b>已切换到文生视频。<br/>提交后显示进度，完成可直接播放。
+      <div class="chips"><span class="chip">海浪拍打礁石的慢镜头</span><span class="chip">城市延时摄影</span></div></div>`;
+  else
+    el.innerHTML = `<div class="empty"><b>${k==='now'?'开始一场游乐场对话':'开始对话'}</b>
+      ${k==='now'?'使用入门提示词测试模型，或在下方编写自己的请求。':'直接提问即可；要出图或视频，点输入框上方的按钮。'}
+      <div class="chips"><span class="chip">分析数据</span><span class="chip">总结文本</span><span class="chip">代码</span></div></div>`;
+
+  el.querySelectorAll('.chip').forEach(c => c.onclick = () => { $('#ta').value = c.textContent; });
+}
+
+function renderFoot(){
+  const k = cur, s = state[k], m = model(k), cap = activeCap(k);
+  const blocked = k === 'p1' && mainCap(m) !== 'chat';
+  const noModel = intentDriven(k) && modelsFor(s.intent, s.group).length === 0;
+  const ph = cap === 'image' ? '描述你想要的画面…' : cap === 'video' ? '描述视频内容…' : '随便问';
+
+  // 豆包式意图按钮：二期起出现在输入框上方。
+  // 当前分组没有对应模型时不置灰死，仍可点，点了说明原因并给切换动作。
+  let modes = '';
+  if (intentDriven(k)){
+    modes = `<div class="modes">` + MODES.map(x => {
+      const avail = modelsFor(x.cap, s.group).length > 0;
+      const other = avail ? '' : (GROUPS.find(g => g !== s.group && modelsFor(x.cap, g).length > 0) || '');
+      const req = avail ? '' : (other ? `<span class="req">需 ${other}</span>` : `<span class="req">未开通</span>`);
+      return `<button class="mode ${s.intent===x.cap?'on':''} ${avail?'':'off'}" data-c="${x.cap}" data-avail="${avail?1:0}">${x.icon} ${x.label}${req}</button>`;
+    }).join('') + `</div>`;
+  }
+
+  let extra = '';
+  if (cap === 'image') extra = `<label class="cost">张数 <input type="text" id="n" value="${s.n}" style="width:46px"/></label>`;
+  if (cap === 'video') extra = `<label class="cost">时长秒 <input type="text" id="dur" value="${s.dur}" style="width:46px"/></label>`;
+
+  // 四项现有能力全程保留：附件、联网、参数、清空历史
+  const attachEnabled = cap === 'chat';
+  const attachReal = k === 'p3' && attachEnabled && m.caps.includes('vision');
+  const attachBtn = attachEnabled
+    ? `<button class="tool ${s.attach?'on':''}" id="att" title="${attachReal?'上传图片到对话':'文件处理入口保留；完整上传在第三期做通'}">📎${s.attach?' 已附':' 附件'}</button>`
+    : '';
+
+  const webEnabled = cap === 'chat' && (k === 'now' || m.web);
+  const webBtn = cap === 'chat'
+    ? `<button class="tool ${s.web?'on':''}" id="web" ${webEnabled?'':'disabled'} title="${webEnabled?'联网搜索':'当前模型不支持联网'}">🌐 联网</button>`
+    : '';
+
+  const paramBtn = `<button class="tool ${!s.simple?'on':''}" id="params" title="参数设置">⚙ 参数${k!=='now' && !s.simple ? ' · 开':''}</button>`;
+  const clearBtn = `<button class="tool" id="clr" ${s.msgs.length?'':'disabled'} title="清空历史上下文">🗑 清空</button>`;
+  const apiBtn = k === 'p3' ? `<button class="tool" id="api">&lt;/&gt; 复制 API 示例</button>` : '';
+
+  const costTip = k === 'now' ? '' :
+    `<span class="cost">预估消耗 ${cap==='image'?'¥'+(s.n*0.28).toFixed(2):cap==='video'?'¥'+(s.dur*0.9).toFixed(2):'¥0.03 起'}</span>`;
+
+  let tip = '';
+  if (blocked) tip = `<div class="cost" style="color:var(--warn);margin-bottom:6px">当前模型是「${CAPNAME[mainCap(m)]}」能力，对话台无法提交。第二期改成先点上方按钮选要干什么。</div>`;
+  if (noModel || s.notice){
+    const capName = CAPNAME[s.notice ? s.notice.cap : s.intent];
+    const target = s.notice ? s.notice.group : GROUPS.find(g => g !== s.group && modelsFor(s.intent, g).length > 0);
+    tip = `<div class="tipbar"><span>当前分组「${s.group}」没有可用的${capName}模型。</span>` +
+      (target ? `<button id="switchg" data-g="${target}" data-c="${s.notice?s.notice.cap:s.intent}">切换到 ${target} 分组</button>` : '<span>请联系管理员开通该能力。</span>') +
+      `</div>`;
+  }
+
+  const showParams = !s.simple || k === 'now';
+  const params = showParams ? `<div class="params">
+      <label>Temperature <input type="text" value="0.7"/></label>
+      <label>Top P <input type="text" value="1"/></label>
+      <label>Frequency <input type="text" value="0"/></label>
+      <label>Presence <input type="text" value="0"/></label>
+      <label>Max Tokens <input type="text" value="4096"/></label>
+      <label>Seed <input type="text" value=""/></label>
+    </div>` : '';
+
+  $('#foot').innerHTML = `${modes}${tip}
+    <textarea class="ta" id="ta" placeholder="${ph}" ${blocked||noModel?'disabled':''}></textarea>
+    <div class="tools">${attachBtn}${webBtn}${paramBtn}${clearBtn}${apiBtn}${extra}
+      <div class="spacer"></div>${costTip}
+      <button class="send" id="send" ${blocked||noModel||s.busy?'disabled':''}>${s.busy?'生成中…':'发送'}</button>
+    </div>${params}`;
+
+  document.querySelectorAll('.mode').forEach(b => b.onclick = () => {
+    const cap = b.dataset.c;
+    if (b.dataset.avail === '0'){
+      // 不静默失效：说明原因并给出可执行的下一步
+      const target = GROUPS.find(g => g !== s.group && modelsFor(cap, g).length > 0) || '';
+      s.notice = {cap, group:target};
+      render();
+      return;
+    }
+    s.notice = null; s.intent = cap; s.msgs = []; syncModel(k); render();
+  });
+  if ($('#switchg')) $('#switchg').onclick = e => {
+    s.group = e.target.dataset.g;
+    s.intent = e.target.dataset.c;
+    s.notice = null; s.msgs = []; syncModel(k); render();
+  };
+  if ($('#att')) $('#att').onclick = () => {
+    if (!attachReal && k !== 'p3') {
+      alert('文件处理入口保留。现状与第一、二期仍是现有占位菜单（上传文件 / 图片 / 截屏 / 拍照）；第三期在对话意图下做通真实上传。');
+      return;
+    }
+    s.attach = !s.attach; renderFoot();
+  };
+  if ($('#web')) $('#web').onclick = () => {
+    if (webEnabled) { s.web = !s.web; renderFoot(); }
+  };
+  if ($('#params')) $('#params').onclick = () => { s.simple = !s.simple; render(); };
+  if ($('#clr')) $('#clr').onclick = () => {
+    if (!s.msgs.length) return;
+    if (confirm('清空本页历史上下文？浏览器里保存的游乐场消息会全部删除，且不可恢复。')) {
+      s.msgs = []; s.attach = false; render();
+    }
+  };
+  if ($('#api')) $('#api').onclick = showApi;
+  if ($('#n'))   $('#n').onchange   = e => { s.n = +e.target.value || 1; renderFoot(); };
+  if ($('#dur')) $('#dur').onchange = e => { s.dur = +e.target.value || 5; renderFoot(); };
+  if ($('#send'))$('#send').onclick = submit;
+}
+
+function submit(){
+  const k = cur, s = state[k], m = model(k), cap = activeCap(k);
+  const ta = $('#ta'); const text = (ta.value || '').trim();
+  if (!text) return;
+  s.msgs.push({role:'user', text, att:s.attach});
+  ta.value = ''; s.busy = true; render();
+
+  if (k === 'now' && mainCap(m) !== 'chat'){
+    setTimeout(() => {
+      s.msgs.push({type:'raw', text:`{"error":{"message":"this model does not support chat completions","type":"invalid_request_error","code":null}}`});
+      s.busy = false; render();
+    }, 700);
+    return;
+  }
+  if (cap === 'image'){
+    setTimeout(() => { s.msgs.push({type:'images', n:s.n, model:m.name}); s.busy = false; render(); }, 1400);
+    return;
+  }
+  if (cap === 'video'){
+    let p = 0;
+    const idx = s.msgs.push({type:'progress', p:0}) - 1;
+    const timer = setInterval(() => {
+      p += 20; s.msgs[idx] = {type:'progress', p};
+      if (p >= 100){ clearInterval(timer); s.msgs[idx] = {type:'video', dur:s.dur, model:m.name}; s.busy = false; }
+      render();
+    }, 700);
+    return;
+  }
+  setTimeout(() => {
+    if (k !== 'now' && /余额|额度|贵/.test(text)){
+      s.msgs.push({type:'friendly', text:'额度不足，本次预计需要 ¥0.03，当前可用 ¥0.00。', acts:['去充值','换个模型']});
+    } else {
+      s.msgs.push({role:'bot',
+        text: s.attach ? '（已读取你上传的图片）图中是一张架构示意图，主要包含网关、渠道适配与计费三层。'
+                       : '这是模拟回复：实际会按所选模型流式返回内容。',
+        cost: k === 'now' ? '' : `${m.name} · 本次已扣 ¥0.03 · 耗时 1.2s`});
+    }
+    s.busy = false; s.attach = false; render();
+  }, 900);
+}
+
+function showApi(){
+  const s = state[cur];
+  const cap = activeCap(cur);
+  const path = cap === 'image' ? '/v1/images/generations' : cap === 'video' ? '/v1/videos' : '/v1/chat/completions';
+  const bodyText = cap === 'chat'
+    ? `"messages": [{"role":"user","content":"你好"}],\n    "stream": true`
+    : cap === 'image' ? `"prompt": "水墨风格的城市夜景",\n    "n": ${s.n}` : `"prompt": "海浪拍打礁石",\n    "seconds": ${s.dur}`;
+  const d = document.createElement('div');
+  d.className = 'modal';
+  d.innerHTML = `<div class="box"><button class="x">✕</button><h3 style="margin:0 0 4px;font-size:14px">复制 API 示例</h3>
+    <div class="cost">按当前意图给出对应端点，模型与分组已填好。</div>
+    <pre>curl https://your-site${path} \\
+  -H "Authorization: Bearer $YOUR_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "${s.model}",
+    "group": "${s.group}",
+    ${bodyText}
+  }'</pre></div>`;
+  d.onclick = e => { if (e.target === d || e.target.className === 'x') d.remove(); };
+  document.body.appendChild(d);
+}
+
+function renderSide(){
+  const k = cur, s = state[k];
+  const notes = {
+    now:`<h3>现状的问题</h3><ul>
+      <li class="bad">要用户自己按模型区分能力，选错才发现</li>
+      <li class="bad">图片/视频模型发出去按对话失败，报原始 JSON</li>
+      <li>回形针、联网、参数、清空历史这四个入口已经在输入框下方</li>
+      <li class="bad">回形针点了只提示「开发中」，还没真正传文件</li>
+      <li class="bad">六个采样参数默认全铺开</li>
+      <li class="bad">看不到这次试玩要花多少钱</li></ul>
+      <div class="tagline">试法：模型切到 gpt-image-1，随便发一句。</div>`,
+    p1:`<h3>第一期改了什么</h3><ul>
+      <li class="ok">模型带能力标签，选错时禁止提交并说明原因</li>
+      <li class="ok">附件 / 联网 / 参数 / 清空历史全部保留</li>
+      <li class="ok">默认简单模式，点「参数」仍可展开六个控件</li>
+      <li class="ok">报错说人话并给下一步动作</li>
+      <li class="ok">显示预估消耗与已扣金额</li>
+      <li class="ok">联网开关按模型显隐</li></ul>
+      <div class="tagline">仍是「按模型区分」，只是不再让人踩坑。试法：切 gpt-image-1 看拦截；发一句带「额度」的话。</div>`,
+    p2:`<h3>第二期：改成先选意图</h3><ul>
+      <li class="ok">输入框上方三个按钮：对话 / 生图 / 生视频</li>
+      <li class="ok">点按钮自动挑当前分组可用的模型并切工作台</li>
+      <li class="ok">模型下拉降为次要项，只在该意图内筛选</li>
+      <li class="ok">当前分组无对应模型时按钮标注「需 xx 分组」，点了说明原因并可一键切换，不静默失效</li>
+      <li class="ok">计费与正式 /v1/images、视频任务一致</li>
+      <li class="ok">对话意图下附件、联网、参数、清空历史仍在原位；生图/视频时附件和联网按能力隐藏（这两项只对对话有意义）</li></ul>
+      <div class="tagline">试法：点「生图」直接提交。<b>「生视频」在 default 分组带「需 vip」标记</b>，点它会说明原因并给「切换到 vip 分组」按钮，一点就能用——豆包不存在这种情况，网关必须处理。</div>`,
+    p3:`<h3>第三期改了什么</h3><ul>
+      <li class="ok">对话意图下把现有附件入口做通：支持 Vision 的模型可真实传图</li>
+      <li class="ok">试玩记录可回看</li>
+      <li class="ok">复制 API 示例按当前意图给对应端点</li>
+      <li class="ok">可选双模型并排对比</li></ul>
+      <div class="tagline">试法：对话下选 gpt-4o 点「上传图片」；切到生图再点「复制 API 示例」看端点变化。</div>`
+  }[k];
+
+  const hist = k === 'p3' ? `<div class="note"><h3>最近试玩</h3>
+    ${s.hist.map(h=>`<div class="hist"><span>${h.m}</span>
+      <span class="${h.r==='成功'?'s':'f'}">${h.r} · ${h.c} · ${h.t}</span></div>`).join('')}
+    <div class="tagline">只存最近 20 次，不做完整会话云同步。</div></div>` : '';
+
+  const gap = intentDriven(k) ? `<div class="note"><h3>实现前提</h3><ul>
+    <li>能力数据后端已有：<code>supported_endpoint_types</code>（模型广场在用）</li>
+    <li class="bad">但游乐场调的 <code>/api/user/models</code> 目前只返回模型名，不带能力</li>
+    <li>要做意图切换，需先把能力字段透出给游乐场</li></ul>
+    <div class="tagline">这是本方案唯一的后端前置改动，范围很小。</div></div>` : '';
+
+  const scope = `<div class="note"><h3>明确不做</h3><ul>
+    <li>不做记忆、智能体商店、画布协同</li>
+    <li>不隐藏「分组」——计费和渠道依赖它</li>
+    <li>不改对外 API 合同来迁就试玩</li>
+    <li>不把试玩做成免费</li></ul>
+    <div class="tagline">衡量指标：试玩成功率、误发对话次数降到接近 0、试玩后是否转为正式 API 调用。</div></div>`;
+
+  $('#side').innerHTML = `<div class="note">${notes}</div>${hist}${gap}${scope}`;
+}
+
+function render(){
+  const p = PHASES.find(x => x.key === cur);
+  $('#desc').className = 'desc' + (cur === 'now' ? ' now' : '');
+  $('#desc').innerHTML = `<b>${p.title}</b> — ${p.desc}`;
+  renderTabs(); renderBar(); renderBody(); renderFoot(); renderSide();
+}
+render();
+</script>
+</body>
+</html>

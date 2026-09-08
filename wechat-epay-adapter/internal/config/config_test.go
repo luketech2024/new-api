@@ -66,6 +66,14 @@ func TestConfigValidateRejectsUnsafeOrWeakConfiguration(t *testing.T) {
 			c.WechatPreviousPublicKeyID = c.WechatPublicKeyID
 			c.WechatPreviousPublicKeyFile = c.WechatPublicKeyFile
 		}},
+		{name: "alipay enabled without app id", mutate: func(c *Config) { c.AlipayEnabled = true }},
+		{name: "alipay uses wechat private key", mutate: func(c *Config) {
+			c.AlipayEnabled = true
+			c.AlipayAppID = "alipay-app"
+			c.AlipayPrivateKeyFile = c.WechatPrivateKey
+			c.AlipayPublicKeyFile = c.WechatPublicKeyFile
+			c.AlipayNotifyURL = "https://pay.example.com/api/v1/alipay/notify"
+		}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -106,4 +114,27 @@ func TestConfigValidateAcceptsPreviousPublicKeyDuringRotation(t *testing.T) {
 	config.WechatPreviousPublicKeyID = "previous-pub-key-id"
 	config.WechatPreviousPublicKeyFile = config.WechatPublicKeyFile
 	assert.NoError(t, config.Validate())
+}
+
+func TestConfigValidateAcceptsCompleteAlipayConfiguration(t *testing.T) {
+	config := validConfig(t)
+	alipayPrivate := filepath.Join(t.TempDir(), "alipay-private.pem")
+	alipayPublic := filepath.Join(t.TempDir(), "alipay-public.pem")
+	require.NoError(t, os.WriteFile(alipayPrivate, mustRead(t, config.WechatPrivateKey), 0o600))
+	require.NoError(t, os.WriteFile(alipayPublic, mustRead(t, config.WechatPublicKeyFile), 0o600))
+	config.AlipayEnabled = true
+	config.AlipayAppID = "alipay-app"
+	config.AlipayPrivateKeyFile = alipayPrivate
+	config.AlipayPublicKeyFile = alipayPublic
+	config.AlipayNotifyURL = "https://pay.example.com/api/v1/alipay/notify"
+	config.AlipayGateway = "https://openapi.alipay.com/gateway.do"
+	config.AlipaySignType = "RSA2"
+	assert.NoError(t, config.Validate())
+}
+
+func mustRead(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	return data
 }

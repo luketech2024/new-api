@@ -10,6 +10,7 @@ const (
 	RouteCashier            = "/cashier/{access_token}"
 	RouteCashierStatus      = "/api/v1/cashier/{access_token}/status"
 	RouteWechatNotification = "/api/v1/wechat/notify"
+	RouteAlipayNotification = "/api/v1/alipay/notify"
 	RouteHealthLive         = "/health/live"
 	RouteHealthReady        = "/health/ready"
 	RouteMetrics            = "/metrics"
@@ -28,6 +29,7 @@ var RouteContracts = []RouteContract{
 	{Method: http.MethodGet, Path: RouteCashier, Authentication: "access_token"},
 	{Method: http.MethodGet, Path: RouteCashierStatus, Authentication: "access_token"},
 	{Method: http.MethodPost, Path: RouteWechatNotification, Authentication: "wechat_public_key"},
+	{Method: http.MethodPost, Path: RouteAlipayNotification, Authentication: "alipay_rsa2"},
 	{Method: http.MethodGet, Path: RouteHealthLive, Authentication: "none"},
 	{Method: http.MethodGet, Path: RouteHealthReady, Authentication: "none"},
 	{Method: http.MethodGet, Path: RouteMetrics, Authentication: "bearer_or_private_network"},
@@ -50,6 +52,7 @@ type SubmitRequest struct {
 
 type CashierStatusResponse struct {
 	MerchantOrder   string     `json:"out_trade_no"`
+	PaymentType     string     `json:"payment_type"`
 	Subject         string     `json:"subject"`
 	Amount          string     `json:"amount"`
 	Status          string     `json:"status"`
@@ -62,9 +65,11 @@ type CashierStatusResponse struct {
 
 type AdminOrderResponse struct {
 	MerchantOrder        string     `json:"out_trade_no"`
+	PaymentType          string     `json:"payment_type"`
 	Status               string     `json:"status"`
 	Amount               string     `json:"amount"`
 	WechatOrderMasked    string     `json:"wechat_trade_no"`
+	AlipayOrderMasked    string     `json:"alipay_trade_no"`
 	CreatedAt            time.Time  `json:"created_at"`
 	PaidAt               *time.Time `json:"paid_at"`
 	NotifiedAt           *time.Time `json:"notified_at"`
@@ -86,6 +91,32 @@ const (
 	WechatNotificationInvalid      WechatNotificationResult = "invalid"
 	WechatNotificationTemporary    WechatNotificationResult = "temporary_failure"
 )
+
+type AlipayNotificationResult string
+
+const (
+	AlipayNotificationPersisted    AlipayNotificationResult = "persisted"
+	AlipayNotificationUnknownOrder AlipayNotificationResult = "unknown_order"
+	AlipayNotificationInvalid      AlipayNotificationResult = "invalid"
+	AlipayNotificationTemporary    AlipayNotificationResult = "temporary_failure"
+	AlipayNotifySuccessBody                                 = "success"
+	AlipayNotifyFailBody                                    = "fail"
+)
+
+// ResponseForAlipayNotification returns the HTTP status and exact body Alipay retries against.
+// Accepted and unknown-order cases must be the literal success string, never a WeChat 204.
+func ResponseForAlipayNotification(result AlipayNotificationResult) (int, string) {
+	switch result {
+	case AlipayNotificationPersisted, AlipayNotificationUnknownOrder:
+		return http.StatusOK, AlipayNotifySuccessBody
+	case AlipayNotificationInvalid:
+		return http.StatusBadRequest, AlipayNotifyFailBody
+	case AlipayNotificationTemporary:
+		return http.StatusInternalServerError, AlipayNotifyFailBody
+	default:
+		return http.StatusInternalServerError, AlipayNotifyFailBody
+	}
+}
 
 func StatusForWechatNotification(result WechatNotificationResult) int {
 	switch result {

@@ -24,15 +24,19 @@ type SubmitHandler struct {
 	key             string
 	notifyURLPolicy *order.NotifyURLPolicy
 	wechatNotifyURL string
+	alipayNotifyURL string
+	alipayEnabled   bool
 	maximumAmount   string
 	returnURLPolicy *order.ReturnURLPolicy
 	nativeOrders    *order.NativeOrderService
+	precreate       *order.PrecreateService
 }
 
 func NewSubmitHandler(store *store.Store, appConfig config.Config, returnURLPolicy *order.ReturnURLPolicy, notifyURLPolicy *order.NotifyURLPolicy, nativeOrders ...*order.NativeOrderService) *SubmitHandler {
 	handler := &SubmitHandler{
 		store: store, partnerID: appConfig.EpayPartnerID, key: appConfig.EpayKey,
 		notifyURLPolicy: notifyURLPolicy, wechatNotifyURL: appConfig.WechatNotifyURL,
+		alipayNotifyURL: appConfig.AlipayNotifyURL, alipayEnabled: appConfig.AlipayEnabled,
 		maximumAmount: appConfig.MaxOrderAmountYuan, returnURLPolicy: returnURLPolicy,
 	}
 	if len(nativeOrders) > 0 {
@@ -63,8 +67,16 @@ func (handler *SubmitHandler) Handle(context *gin.Context) {
 		AbortErrorPage(context, http.StatusBadRequest, "required epay field missing")
 		return
 	}
-	if request.PartnerID != handler.partnerID || request.PaymentType != epay.PaymentTypeWechat || request.SignType != epay.SignTypeMD5 || !epay.Verify(params, handler.key) {
+	if request.PartnerID != handler.partnerID || request.SignType != epay.SignTypeMD5 || !epay.Verify(params, handler.key) {
 		AbortErrorPage(context, http.StatusForbidden, fmt.Sprintf("credentials rejected: pid_match=%t type=%q sign_type=%q signature_valid=%t", request.PartnerID == handler.partnerID, request.PaymentType, request.SignType, epay.Verify(params, handler.key)))
+		return
+	}
+	if !epay.AllowedPaymentType(request.PaymentType) {
+		AbortErrorPage(context, http.StatusForbidden, fmt.Sprintf("unsupported payment type %q", request.PaymentType))
+		return
+	}
+	if request.PaymentType == epay.PaymentTypeAlipay && (!handler.alipayEnabled || handler.precreate == nil) {
+		AbortErrorPage(context, http.StatusServiceUnavailable, "alipay channel is not enabled")
 		return
 	}
 	if err := order.ValidateMerchantOrder(request.MerchantOrder); err != nil {
@@ -121,13 +133,25 @@ func (handler *SubmitHandler) Handle(context *gin.Context) {
 		token = cookie.Value
 	} else {
 		context.SetCookie(cashierCookieName(result.Order.ID), token, int(order.OrderTTL.Seconds()), "/", "", true, true)
-		if handler.nativeOrders != nil {
+		if handler.nativeOrders != nil && result.Order.PaymentType == epay.PaymentTypeWechat {
 			if err := handler.nativeOrders.Create(context.Request.Context(), order.NativeOrderRecord{
 				ID: result.Order.ID, OutTradeNo: result.Order.OutTradeNo, Subject: result.Order.Subject,
-				AmountFen: result.Order.AmountFen, NotifyURL: handler.wechatNotifyURL, ExpiresAt: result.Order.ExpiresAt,
+				AmountFen: result.Order.AmountFen, AmountText: result.Order.AmountText, PaymentType: result.Order.PaymentType,
+				NotifyURL: handler.wechatNotifyURL, ExpiresAt: result.Order.ExpiresAt,
 				Status: result.Order.Status, Version: result.Order.Version, CreatedAt: result.Order.CreatedAt,
 			}); err != nil {
 				AbortErrorPage(context, http.StatusServiceUnavailable, "creating wechat native order failed: "+err.Error())
+				return
+			}
+		}
+		if handler.precreate != nil && result.Order.PaymentType == epay.PaymentTypeAlipay {
+			if err := handler.precreate.Create(context.Request.Context(), order.NativeOrderRecord{
+				ID: result.Order.ID, OutTradeNo: result.Order.OutTradeNo, Subject: result.Order.Subject,
+				AmountFen: result.Order.AmountFen, AmountText: result.Order.AmountText, PaymentType: result.Order.PaymentType,
+				NotifyURL: handler.alipayNotifyURL, ExpiresAt: result.Order.ExpiresAt,
+				Status: result.Order.Status, Version: result.Order.Version, CreatedAt: result.Order.CreatedAt,
+			}); err != nil {
+				AbortErrorPage(context, http.StatusServiceUnavailable, "creating alipay precreate order failed: "+err.Error())
 				return
 			}
 		}

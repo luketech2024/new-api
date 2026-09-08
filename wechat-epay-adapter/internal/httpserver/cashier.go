@@ -18,14 +18,14 @@ const cashierPageTemplate = `<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#07c160">
-  <title>微信支付</title>
+  <meta name="theme-color" content="{{.ThemeColor}}">
+  <title>{{.Title}}</title>
   <style nonce="{{.CSPNonce}}">
     :root { color: #182230; background: #f4f7fb; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
     * { box-sizing: border-box; }
-    body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at top, #e4f7eb 0, #f4f7fb 42rem); }
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at top, {{.GlowColor}} 0, #f4f7fb 42rem); }
     main { width: min(100%, 420px); overflow: hidden; border: 1px solid #dfe6ee; border-radius: 16px; background: #fff; box-shadow: 0 20px 56px rgba(21, 42, 63, .12); }
-    .header { padding: 24px 28px 20px; text-align: center; background: linear-gradient(135deg, #07c160, #2acb76); color: #fff; }
+    .header { padding: 24px 28px 20px; text-align: center; background: linear-gradient(135deg, {{.HeaderFrom}}, {{.HeaderTo}}); color: #fff; }
     .brand { margin: 0 0 8px; font-size: 15px; font-weight: 600; letter-spacing: .04em; }
     h1 { margin: 0; font-size: 22px; font-weight: 650; overflow-wrap: anywhere; }
     .content { display: grid; justify-items: center; gap: 18px; padding: 28px; text-align: center; }
@@ -47,7 +47,7 @@ const cashierPageTemplate = `<!doctype html>
 <body>
   <main>
     <section class="header">
-      <p class="brand">WECHAT PAY</p>
+      <p class="brand">{{.Brand}}</p>
       <h1>{{.Subject}}</h1>
     </section>
     <section class="content">
@@ -55,8 +55,8 @@ const cashierPageTemplate = `<!doctype html>
         <p class="amount-label">应付金额</p>
         <p class="amount">¥{{.Amount}}</p>
       </div>
-      {{if .QRCode}}<div class="qr-frame"><img id="payment-code" src="{{.QRCode}}" alt="微信支付二维码"></div>{{end}}
-      <p class="hint" id="hint">请使用微信扫码完成支付</p>
+      {{if .QRCode}}<div class="qr-frame"><img id="payment-code" src="{{.QRCode}}" alt="{{.QRAlt}}"></div>{{end}}
+      <p class="hint" id="hint">{{.Hint}}</p>
       <p class="status" id="status" data-state="{{.Status}}" role="status" aria-live="polite">{{.Status}}</p>
     </section>
     <p class="footer">支付成功后将自动跳转并更新账户余额</p>
@@ -69,7 +69,7 @@ const cashierPageTemplate = `<!doctype html>
       var intervalId;
       var inFlight = false;
       var statusText = {
-        PAYABLE: "等待微信支付",
+        PAYABLE: {{.PayableStatus}},
         PAID_PENDING_NOTIFY: "支付成功，正在更新余额",
         NOTIFIED: "充值成功，正在跳转",
         EXPIRED: "订单已过期",
@@ -135,13 +135,40 @@ func (handler *CashierHandler) Show(context *gin.Context) {
 		QRCode         template.URL
 		StatusEndpoint string
 		CSPNonce       string
+		Title          string
+		Brand          string
+		ThemeColor     string
+		GlowColor      string
+		HeaderFrom     string
+		HeaderTo       string
+		QRAlt          string
+		Hint           string
+		PayableStatus  template.JS
 	}{
 		Subject: paymentOrder.Subject, Amount: paymentOrder.AmountText, Status: status,
 		StatusEndpoint: "/api/v1/cashier/" + context.Param("access_token") + "/status",
 		CSPNonce:       context.GetString(CSPNonceContextKey),
+		Title:          "微信支付", Brand: "WECHAT PAY", ThemeColor: "#07c160", GlowColor: "#e4f7eb",
+		HeaderFrom: "#07c160", HeaderTo: "#2acb76", QRAlt: "微信支付二维码", Hint: "请使用微信扫码完成支付",
+		PayableStatus: `"等待微信支付"`,
 	}
-	if status == order.StatusPayable && paymentOrder.WechatCodeURL != nil {
-		png, err := qrcode.Encode(*paymentOrder.WechatCodeURL, qrcode.Medium, 256)
+	if paymentOrder.PaymentType == "alipay" {
+		page.Title = "支付宝"
+		page.Brand = "ALIPAY"
+		page.ThemeColor = "#1677ff"
+		page.GlowColor = "#e8f3ff"
+		page.HeaderFrom = "#1677ff"
+		page.HeaderTo = "#3c8dff"
+		page.QRAlt = "支付宝支付二维码"
+		page.Hint = "请使用支付宝扫码完成支付"
+		page.PayableStatus = `"等待支付宝支付"`
+	}
+	qrValue := paymentOrder.WechatCodeURL
+	if paymentOrder.PaymentType == "alipay" {
+		qrValue = paymentOrder.AlipayQrCode
+	}
+	if status == order.StatusPayable && qrValue != nil {
+		png, err := qrcode.Encode(*qrValue, qrcode.Medium, 256)
 		if err != nil {
 			AbortErrorPage(context, http.StatusServiceUnavailable, "encoding the payment QR code failed: "+err.Error())
 			return
@@ -165,7 +192,7 @@ func (handler *CashierHandler) Status(context *gin.Context) {
 	}
 	status := handler.displayStatus(paymentOrder)
 	response := CashierStatusResponse{
-		MerchantOrder: paymentOrder.OutTradeNo, Subject: paymentOrder.Subject, Amount: paymentOrder.AmountText,
+		MerchantOrder: paymentOrder.OutTradeNo, PaymentType: paymentOrder.PaymentType, Subject: paymentOrder.Subject, Amount: paymentOrder.AmountText,
 		Status: string(status), ExpiresAt: paymentOrder.ExpiresAt, PaidAt: paymentOrder.PaidAt, NotifiedAt: paymentOrder.NotifiedAt,
 	}
 	if status == order.StatusNotified && paymentOrder.ReturnURL != nil {

@@ -7,5 +7,8 @@ import (
 
 // ApplyInitial creates the payment tables and portable indexes on a fresh database.
 func ApplyInitial(db *gorm.DB) error {
-	return store.Migrate(db)
+	if err := store.Migrate(db); err != nil {
+		return err
+	}
+	return ApplyAlipayOrderColumns(db)
 }

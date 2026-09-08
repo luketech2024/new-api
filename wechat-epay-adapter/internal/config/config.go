@@ -43,6 +43,14 @@ type Config struct {
 	NotificationWorkers         int
 	LogLevel                    string
 	LogDir                      string
+	AlipayEnabled               bool
+	AlipayAppID                 string
+	AlipayPrivateKeyFile        string
+	AlipayPublicKeyFile         string
+	AlipayNotifyURL             string
+	AlipayGateway               string
+	AlipaySellerID              string
+	AlipaySignType              string
 }
 
 func Load() (Config, error) {
@@ -78,6 +86,14 @@ func Load() (Config, error) {
 		NotificationWorkers:         workers,
 		LogLevel:                    optional("LOG_LEVEL", "info"),
 		LogDir:                      optional("LOG_DIR", "./logs"),
+		AlipayEnabled:               optionalBool("ALIPAY_ENABLED"),
+		AlipayAppID:                 optional("ALIPAY_APP_ID", ""),
+		AlipayPrivateKeyFile:        optional("ALIPAY_PRIVATE_KEY_FILE", ""),
+		AlipayPublicKeyFile:         optional("ALIPAY_ALIPAY_PUBLIC_KEY_FILE", ""),
+		AlipayNotifyURL:             optional("ALIPAY_NOTIFY_URL", ""),
+		AlipayGateway:               optional("ALIPAY_GATEWAY", "https://openapi.alipay.com/gateway.do"),
+		AlipaySellerID:              optional("ALIPAY_SELLER_ID", ""),
+		AlipaySignType:              optional("ALIPAY_SIGN_TYPE", "RSA2"),
 	}
 	if err := config.Validate(); err != nil {
 		return Config{}, err
@@ -156,7 +172,43 @@ func (c Config) Validate() error {
 			return fmt.Errorf("WECHAT_PREVIOUS_PUBLIC_KEY_FILE: %w", err)
 		}
 	}
+	return c.ValidateAlipay()
+}
+
+func (c Config) ValidateAlipay() error {
+	if !c.AlipayEnabled {
+		return nil
+	}
+	if c.AlipayAppID == "" {
+		return errors.New("ALIPAY_APP_ID is required when ALIPAY_ENABLED is true")
+	}
+	if c.AlipaySignType != "" && c.AlipaySignType != "RSA2" {
+		return errors.New("ALIPAY_SIGN_TYPE must be RSA2")
+	}
+	if err := requireHTTPSURL("ALIPAY_NOTIFY_URL", c.AlipayNotifyURL); err != nil {
+		return err
+	}
+	if err := requireHTTPSURL("ALIPAY_GATEWAY", c.AlipayGateway); err != nil {
+		return err
+	}
+	if c.AlipayPrivateKeyFile == "" || c.AlipayPrivateKeyFile == c.WechatPrivateKey {
+		return errors.New("ALIPAY_PRIVATE_KEY_FILE must be a dedicated Alipay private key file")
+	}
+	if c.AlipayPublicKeyFile == "" || c.AlipayPublicKeyFile == c.WechatPublicKeyFile {
+		return errors.New("ALIPAY_ALIPAY_PUBLIC_KEY_FILE must be a dedicated Alipay public key file")
+	}
+	if err := validatePrivateKeyFile(c.AlipayPrivateKeyFile); err != nil {
+		return fmt.Errorf("ALIPAY_PRIVATE_KEY_FILE: %w", err)
+	}
+	if err := validatePublicKeyFile(c.AlipayPublicKeyFile); err != nil {
+		return fmt.Errorf("ALIPAY_ALIPAY_PUBLIC_KEY_FILE: %w", err)
+	}
 	return nil
+}
+
+func optionalBool(name string) bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(name)))
+	return value == "true" || value == "1" || value == "yes"
 }
 
 func required(name string) string {

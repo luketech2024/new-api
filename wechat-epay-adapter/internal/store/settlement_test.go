@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/alipay"
 	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/order"
 	"github.com/QuantumNous/new-api/wechat-epay-adapter/internal/wechat"
 	"github.com/stretchr/testify/assert"
@@ -47,6 +48,156 @@ func TestConfirmWechatPaymentPersistsOrderAndSingleNotificationTask(t *testing.T
 	assert.True(t, duplicate.Idempotent)
 	require.NoError(t, repository.DB().Model(&NotificationTask{}).Where("order_id = ?", paymentOrder.ID).Count(&taskCount).Error)
 	assert.Equal(t, int64(1), taskCount)
+}
+
+func TestConfirmAlipayPaymentPersistsOrderAndSingleNotificationTask(t *testing.T) {
+	repository := newTestStore(t)
+	paymentOrder := testOrder("alipay-settlement")
+	paymentOrder.PaymentType = "alipay"
+	paymentOrder.Status = order.StatusPayable
+	require.NoError(t, repository.DB().Create(&paymentOrder).Error)
+	notice := alipay.PaymentNotice{
+		NotifyID: "ali-notice-1", AppID: "app", MerchantOrderNo: paymentOrder.OutTradeNo,
+		TradeNo: "2026090710001", TradeStatus: alipay.TradeSuccess, TotalAmount: "1.00",
+	}
+	result, err := repository.ConfirmAlipayPayment(ConfirmAlipayPaymentInput{Notice: notice, ExpectedAppID: "app"})
+	require.NoError(t, err)
+	assert.False(t, result.Idempotent)
+
+	var actual PaymentOrder
+	require.NoError(t, repository.DB().First(&actual, "id = ?", paymentOrder.ID).Error)
+	assert.Equal(t, order.StatusPaidPendingNotify, actual.Status)
+	require.NotNil(t, actual.AlipayTradeNo)
+	assert.Equal(t, "2026090710001", *actual.AlipayTradeNo)
+	assert.Nil(t, actual.WechatTransactionID)
+	var task NotificationTask
+	require.NoError(t, repository.DB().First(&task, "order_id = ?", paymentOrder.ID).Error)
+	var payload NotificationPayload
+	require.NoError(t, json.Unmarshal([]byte(task.PayloadSnapshot), &payload))
+	assert.Equal(t, "alipay", payload.PaymentType)
+	assert.Equal(t, "2026090710001", payload.GatewayTradeNo)
+
+	duplicate, err := repository.ConfirmAlipayPayment(ConfirmAlipayPaymentInput{Notice: notice, ExpectedAppID: "app"})
+	require.NoError(t, err)
+	assert.True(t, duplicate.Idempotent)
+	var taskCount int64
+	require.NoError(t, repository.DB().Model(&NotificationTask{}).Where("order_id = ?", paymentOrder.ID).Count(&taskCount).Error)
+	assert.Equal(t, int64(1), taskCount)
+}
+
+func TestConfirmAlipayPaymentConcurrentDuplicateNoticesCreateOneTask(t *testing.T) {
+	repository := newTestStore(t)
+	paymentOrder := testOrder("alipay-concurrent")
+	paymentOrder.PaymentType = "alipay"
+	paymentOrder.Status = order.StatusPayable
+	require.NoError(t, repository.DB().Create(&paymentOrder).Error)
+	notice := alipay.PaymentNotice{
+		NotifyID: "ali-concurrent", AppID: "app", MerchantOrderNo: paymentOrder.OutTradeNo,
+		TradeNo: "2026090710002", TradeStatus: alipay.TradeFinished, TotalAmount: "1.00",
+	}
+	const callers = 10
+	errs := make(chan error, callers)
+	start := make(chan struct{})
+	var group sync.WaitGroup
+	for i := 0; i < callers; i++ {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			<-start
+			_, err := repository.ConfirmAlipayPayment(ConfirmAlipayPaymentInput{Notice: notice, ExpectedAppID: "app"})
+			errs <- err
+		}()
+	}
+	close(start)
+	group.Wait()
+	close(errs)
+	for err := range errs {
+		require.NoError(t, err)
+	}
+	var taskCount int64
+	require.NoError(t, repository.DB().Model(&NotificationTask{}).Where("order_id = ?", paymentOrder.ID).Count(&taskCount).Error)
+	assert.Equal(t, int64(1), taskCount)
+}
+
+func TestConfirmAlipayPaymentRejectsAmountMismatchWithoutWechatFields(t *testing.T) {
+	repository := newTestStore(t)
+	paymentOrder := testOrder("alipay-mismatch")
+	paymentOrder.PaymentType = "alipay"
+	paymentOrder.AmountText = "0.10"
+	paymentOrder.AmountFen = 10
+	paymentOrder.Status = order.StatusPayable
+	require.NoError(t, repository.DB().Create(&paymentOrder).Error)
+	notice := alipay.PaymentNotice{
+		NotifyID: "ali-mismatch", AppID: "app", MerchantOrderNo: paymentOrder.OutTradeNo,
+		TradeNo: "2026090710003", TradeStatus: alipay.TradeSuccess, TotalAmount: "0.01",
+	}
+	_, err := repository.ConfirmAlipayPayment(ConfirmAlipayPaymentInput{Notice: notice, ExpectedAppID: "app"})
+	require.NoError(t, err)
+	var actual PaymentOrder
+	require.NoError(t, repository.DB().First(&actual, "id = ?", paymentOrder.ID).Error)
+	assert.Equal(t, order.StatusManualReview, actual.Status)
+	assert.Nil(t, actual.AlipayTradeNo)
+	assert.Nil(t, actual.WechatTransactionID)
+	var taskCount int64
+	require.NoError(t, repository.DB().Model(&NotificationTask{}).Count(&taskCount).Error)
+	assert.Zero(t, taskCount)
+}
+
+func TestConfirmAlipayPaymentCrossChannelDoesNotWriteWechatTradeNo(t *testing.T) {
+	repository := newTestStore(t)
+	paymentOrder := testOrder("wechat-cross")
+	paymentOrder.Status = order.StatusPayable
+	require.NoError(t, repository.DB().Create(&paymentOrder).Error)
+	notice := alipay.PaymentNotice{
+		NotifyID: "cross-notice", AppID: "app", MerchantOrderNo: paymentOrder.OutTradeNo,
+		TradeNo: "2026090710004", TradeStatus: alipay.TradeSuccess, TotalAmount: "1.00",
+	}
+	_, err := repository.ConfirmAlipayPayment(ConfirmAlipayPaymentInput{Notice: notice, ExpectedAppID: "app"})
+	require.NoError(t, err)
+	var actual PaymentOrder
+	require.NoError(t, repository.DB().First(&actual, "id = ?", paymentOrder.ID).Error)
+	assert.Equal(t, order.StatusManualReview, actual.Status)
+	assert.Nil(t, actual.AlipayTradeNo)
+	assert.Nil(t, actual.WechatTransactionID)
+	var audit PaymentAuditEvent
+	require.NoError(t, repository.DB().Where("event_type = ?", "CHANNEL_CROSS_NOTIFY").First(&audit).Error)
+}
+
+func TestConfirmWechatPaymentCrossChannelDoesNotWriteAlipayTradeNo(t *testing.T) {
+	repository := newTestStore(t)
+	paymentOrder := testOrder("alipay-cross")
+	paymentOrder.PaymentType = "alipay"
+	paymentOrder.Status = order.StatusPayable
+	require.NoError(t, repository.DB().Create(&paymentOrder).Error)
+	notice := wechat.PaymentNotice{
+		NotificationID: "notice-cross", MerchantOrderNo: paymentOrder.OutTradeNo, WechatOrderNo: "wechat-cross",
+		MerchantID: "merchant", AppID: "app", TradeState: wechat.TradeStateSuccess,
+		AmountFen: paymentOrder.AmountFen, Currency: wechat.CurrencyCNY, PaidAt: time.Now().UTC(),
+	}
+	_, err := repository.ConfirmWechatPayment(ConfirmWechatPaymentInput{Notice: notice, ExpectedMerchant: "merchant", ExpectedAppID: "app"})
+	require.NoError(t, err)
+	var actual PaymentOrder
+	require.NoError(t, repository.DB().First(&actual, "id = ?", paymentOrder.ID).Error)
+	assert.Equal(t, order.StatusManualReview, actual.Status)
+	assert.Nil(t, actual.WechatTransactionID)
+	assert.Nil(t, actual.AlipayTradeNo)
+}
+
+func TestAlipayTradeNoUniqueAllowsMultipleNulls(t *testing.T) {
+	repository := newTestStore(t)
+	first := testOrder("null-trade-a")
+	second := testOrder("null-trade-b")
+	require.NoError(t, repository.DB().Create(&first).Error)
+	require.NoError(t, repository.DB().Create(&second).Error)
+	tradeNo := "dup-alipay-trade"
+	third := testOrder("dup-trade-a")
+	third.PaymentType = "alipay"
+	third.AlipayTradeNo = &tradeNo
+	require.NoError(t, repository.DB().Create(&third).Error)
+	fourth := testOrder("dup-trade-b")
+	fourth.PaymentType = "alipay"
+	fourth.AlipayTradeNo = &tradeNo
+	require.Error(t, repository.DB().Create(&fourth).Error)
 }
 
 func TestConfirmWechatPaymentConcurrentDuplicateNoticesCreateOneTask(t *testing.T) {

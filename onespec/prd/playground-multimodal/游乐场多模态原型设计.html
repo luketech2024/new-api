@@ -1,0 +1,273 @@
+<h2 class="sr-only">New API Playground multimodal prototype with chat, image, video, and audio modes</h2>
+<style>
+  .pg-tabs { display:flex; gap:4px; border-bottom:0.5px solid var(--color-border-tertiary); padding:0 16px; }
+  .pg-tab { padding:8px 16px; font-size:13px; font-weight:500; color:var(--color-text-secondary); border-bottom:2px solid transparent; cursor:pointer; background:transparent; border-radius:0; }
+  .pg-tab.active { color:var(--color-text-primary); border-bottom-color:var(--color-text-primary); }
+  .pg-tab svg { width:14px; height:14px; vertical-align:-2px; margin-right:6px; }
+  .pg-body { padding:16px; min-height:520px; }
+  .pg-input-area { border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); overflow:hidden; margin-top:16px; }
+  .pg-textarea { width:100%; min-height:72px; padding:12px 16px; font-size:13px; border:none; outline:none; resize:none; font-family:var(--font-sans); color:var(--color-text-primary); background:var(--color-background-primary); }
+  .pg-controls { display:flex; align-items:center; gap:8px; padding:8px 12px; border-top:0.5px solid var(--color-border-tertiary); background:var(--color-background-secondary); }
+  .pg-btn { display:inline-flex; align-items:center; gap:4px; padding:6px 10px; font-size:12px; border:0.5px solid var(--color-border-secondary); border-radius:var(--border-radius-md); background:transparent; color:var(--color-text-secondary); cursor:pointer; font-family:var(--font-sans); }
+  .pg-btn:hover { background:var(--color-background-secondary); }
+  .pg-btn-primary { background:var(--color-text-primary); color:var(--color-background-primary); border-color:var(--color-text-primary); font-weight:500; }
+  .pg-btn-primary:hover { opacity:0.9; }
+  .pg-select { display:inline-flex; align-items:center; gap:4px; padding:6px 10px; font-size:12px; border:0.5px solid var(--color-border-secondary); border-radius:var(--border-radius-md); background:transparent; color:var(--color-text-secondary); cursor:pointer; }
+  .pg-select svg { width:10px; height:10px; }
+  .pg-model-selector { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; font-size:12px; border:0.5px solid var(--color-border-secondary); border-radius:var(--border-radius-md); background:transparent; color:var(--color-text-primary); font-weight:500; }
+  .pg-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:400px; text-align:center; gap:12px; }
+  .pg-empty-icon { width:44px; height:44px; border-radius:var(--border-radius-md); background:var(--color-background-secondary); display:flex; align-items:center; justify-content:center; color:var(--color-text-secondary); }
+  .pg-empty-icon svg { width:20px; height:20px; }
+  .pg-starter-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; max-width:480px; margin-top:8px; }
+  .pg-starter { display:flex; align-items:center; gap:8px; padding:10px 12px; font-size:12px; border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-md); background:var(--color-background-primary); color:var(--color-text-primary); cursor:pointer; text-align:left; }
+  .pg-starter svg { width:14px; height:14px; color:var(--color-text-secondary); flex-shrink:0; }
+  .pg-starter:hover { background:var(--color-background-secondary); }
+  .pg-img-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .pg-img-card { border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); overflow:hidden; }
+  .pg-img-card img { width:100%; aspect-ratio:1; object-fit:cover; display:block; }
+  .pg-img-actions { display:flex; gap:8px; padding:8px; }
+  .pg-img-actions .pg-btn { padding:4px 8px; font-size:11px; }
+  .pg-skeleton { background:var(--color-background-secondary); border-radius:var(--border-radius-lg); aspect-ratio:1; display:flex; align-items:center; justify-content:center; color:var(--color-text-tertiary); font-size:12px; }
+  .pg-video-list { display:flex; flex-direction:column; gap:12px; }
+  .pg-video-card { border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); overflow:hidden; }
+  .pg-video-player { background:var(--color-background-tertiary); height:160px; display:flex; align-items:center; justify-content:center; color:var(--color-text-tertiary); position:relative; }
+  .pg-video-player .play-btn { width:40px; height:40px; border-radius:50%; background:var(--color-background-primary); border:0.5px solid var(--color-border-secondary); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .pg-video-player .play-btn svg { width:16px; height:16px; color:var(--color-text-primary); }
+  .pg-video-info { padding:10px 12px; display:flex; justify-content:space-between; align-items:center; }
+  .pg-video-info .prompt { font-size:12px; color:var(--color-text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:200px; }
+  .pg-video-status { display:inline-flex; align-items:center; gap:4px; font-size:11px; padding:2px 8px; border-radius:99px; }
+  .pg-video-status.pending { background:var(--color-background-secondary); color:var(--color-text-secondary); }
+  .pg-video-status.done { background:var(--color-background-info); color:var(--color-text-info); }
+  .pg-audio-list { display:flex; flex-direction:column; gap:12px; }
+  .pg-audio-card { border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); padding:12px 16px; }
+  .pg-audio-player { display:flex; align-items:center; gap:12px; }
+  .pg-audio-play { width:36px; height:36px; border-radius:50%; background:var(--color-text-primary); color:var(--color-background-primary); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; border:none; }
+  .pg-audio-play svg { width:14px; height:14px; }
+  .pg-audio-wave { flex:1; height:32px; display:flex; align-items:center; gap:2px; }
+  .pg-audio-wave .bar { width:3px; background:var(--color-text-tertiary); border-radius:1px; }
+  .pg-audio-meta { display:flex; gap:16px; margin-top:8px; font-size:11px; color:var(--color-text-tertiary); }
+  .pg-param-row { display:flex; justify-content:space-between; align-items:center; padding:6px 0; font-size:12px; }
+  .pg-param-row .label { color:var(--color-text-secondary); }
+  .pg-param-row .control { display:flex; align-items:center; gap:6px; }
+  .pg-slider { width:100px; height:4px; appearance:none; background:var(--color-background-tertiary); border-radius:2px; outline:none; }
+  .pg-slider::-webkit-slider-thumb { appearance:none; width:14px; height:14px; border-radius:50%; background:var(--color-text-primary); cursor:pointer; }
+  .pg-section-label { font-size:11px; font-weight:500; color:var(--color-text-tertiary); text-transform:uppercase; letter-spacing:0.5px; margin:0 0 8px 0; }
+  .pg-hidden { display:none; }
+</style>
+
+<div class="pg-tabs" id="tabBar">
+  <button class="pg-tab active" data-mode="chat" onclick="switchMode('chat')">
+    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Chat
+  </button>
+  <button class="pg-tab" data-mode="image" onclick="switchMode('image')">
+    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>Image
+  </button>
+  <button class="pg-tab" data-mode="video" onclick="switchMode('video')">
+    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>Video
+  </button>
+  <button class="pg-tab" data-mode="audio" onclick="switchMode('audio')">
+    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>Audio
+  </button>
+</div>
+
+<div class="pg-body">
+
+<!-- CHAT MODE -->
+<div id="mode-chat">
+  <div class="pg-empty">
+    <div class="pg-empty-icon">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="20" height="20"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    </div>
+    <div>
+      <p style="font-size:15px; font-weight:500; margin:0 0 4px 0; color:var(--color-text-primary);">Start a playground chat</p>
+      <p style="font-size:13px; color:var(--color-text-secondary); margin:0; max-width:400px;">Test a model with a starter prompt, or write your own request below.</p>
+    </div>
+    <div class="pg-starter-grid">
+      <button class="pg-starter"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>Analyze data</button>
+      <button class="pg-starter"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>Summarize text</button>
+      <button class="pg-starter"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>Code</button>
+      <button class="pg-starter"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>Get advice</button>
+    </div>
+  </div>
+
+  <div class="pg-input-area">
+    <textarea class="pg-textarea" placeholder="Ask anything"></textarea>
+    <div class="pg-controls">
+      <button class="pg-btn">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+      </button>
+      <button class="pg-btn">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      </button>
+      <button class="pg-btn">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+      </button>
+      <button class="pg-btn" style="color:var(--color-text-secondary);">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+      <div style="flex:1"></div>
+      <div class="pg-model-selector">gpt-4o <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="10" height="10"><path d="M6 9l6 6 6-6"/></svg></div>
+      <button class="pg-btn pg-btn-primary">Send &rarr;</button>
+    </div>
+  </div>
+</div>
+
+<!-- IMAGE MODE -->
+<div id="mode-image" class="pg-hidden">
+  <p class="pg-section-label">Generated images</p>
+  <div class="pg-img-grid">
+    <div class="pg-img-card">
+      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect fill='%23AFA9EC' width='200' height='200'/%3E%3Ctext x='100' y='105' fill='white' font-size='12' text-anchor='middle' font-family='sans-serif'%3ELandscape%3C/text%3E%3C/svg%3E" alt="Generated landscape" />
+      <div class="pg-img-actions">
+        <button class="pg-btn">Download</button>
+        <button class="pg-btn">Copy URL</button>
+      </div>
+    </div>
+    <div class="pg-img-card">
+      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect fill='%235DCAA5' width='200' height='200'/%3E%3Ctext x='100' y='105' fill='white' font-size='12' text-anchor='middle' font-family='sans-serif'%3EPortrait%3C/text%3E%3C/svg%3E" alt="Generated portrait" />
+      <div class="pg-img-actions">
+        <button class="pg-btn">Download</button>
+        <button class="pg-btn">Copy URL</button>
+      </div>
+    </div>
+    <div class="pg-skeleton">Generating...</div>
+  </div>
+
+  <div class="pg-input-area">
+    <textarea class="pg-textarea" placeholder="Describe the image you want to generate"></textarea>
+    <div class="pg-controls">
+      <button class="pg-btn">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        Upload reference
+      </button>
+      <div class="pg-select">Size: 1024x1024 <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>
+      <div class="pg-select">Quality: HD <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>
+      <div class="pg-select">N: 1 <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>
+      <div style="flex:1"></div>
+      <div class="pg-model-selector">dall-e-3 <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="10" height="10"><path d="M6 9l6 6 6-6"/></svg></div>
+      <button class="pg-btn pg-btn-primary">Generate &rarr;</button>
+    </div>
+  </div>
+</div>
+
+<!-- VIDEO MODE -->
+<div id="mode-video" class="pg-hidden">
+  <p class="pg-section-label">Generated videos</p>
+  <div class="pg-video-list">
+    <div class="pg-video-card">
+      <div class="pg-video-player">
+        <button class="play-btn"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+      </div>
+      <div class="pg-video-info">
+        <span class="prompt">A cat dancing in the garden</span>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <span class="pg-video-status done">Done &middot; 5s</span>
+          <button class="pg-btn" style="padding:4px 8px; font-size:11px;">Download</button>
+        </div>
+      </div>
+    </div>
+    <div class="pg-video-card">
+      <div class="pg-video-player" style="background:var(--color-background-secondary);">
+        <span style="font-size:12px; color:var(--color-text-tertiary);">Generating... 45%</span>
+      </div>
+      <div class="pg-video-info">
+        <span class="prompt">Sunset timelapse over the city</span>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <span class="pg-video-status pending">Processing</span>
+          <button class="pg-btn" style="padding:4px 8px; font-size:11px;">Refresh</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pg-input-area">
+    <textarea class="pg-textarea" placeholder="Describe the video you want to generate"></textarea>
+    <div class="pg-controls">
+      <div class="pg-select">Type: text2video <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>
+      <button class="pg-btn">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+        Upload image
+      </button>
+      <div class="pg-select">Duration: 5s <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>
+      <div class="pg-select">Resolution: 720p <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>
+      <div style="flex:1"></div>
+      <div class="pg-model-selector">kling-video <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="10" height="10"><path d="M6 9l6 6 6-6"/></svg></div>
+      <button class="pg-btn pg-btn-primary">Generate &rarr;</button>
+    </div>
+  </div>
+</div>
+
+<!-- AUDIO MODE -->
+<div id="mode-audio" class="pg-hidden">
+  <p class="pg-section-label">Generated audio</p>
+  <div class="pg-audio-list">
+    <div class="pg-audio-card">
+      <div class="pg-audio-player">
+        <button class="pg-audio-play"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+        <div class="pg-audio-wave" id="wave1"></div>
+        <span style="font-size:11px; color:var(--color-text-tertiary); min-width:60px; text-align:right;">00:15 / 00:30</span>
+      </div>
+      <div class="pg-audio-meta">
+        <span>Voice: alloy</span>
+        <span>Format: mp3</span>
+        <span>Speed: 1.0x</span>
+      </div>
+      <p style="font-size:12px; color:var(--color-text-secondary); margin:8px 0 0 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">"The weather is beautiful today..."</p>
+      <div style="margin-top:8px;">
+        <button class="pg-btn" style="padding:4px 8px; font-size:11px;">Download</button>
+        <button class="pg-btn" style="padding:4px 8px; font-size:11px;">Copy URL</button>
+      </div>
+    </div>
+    <div class="pg-audio-card" style="opacity:0.6;">
+      <div class="pg-audio-player">
+        <button class="pg-audio-play" disabled style="opacity:0.5;"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+        <div class="pg-audio-wave">
+          <div class="bar" style="height:8px;"></div><div class="bar" style="height:12px;"></div><div class="bar" style="height:6px;"></div><div class="bar" style="height:14px;"></div><div class="bar" style="height:10px;"></div><div class="bar" style="height:8px;"></div><div class="bar" style="height:16px;"></div><div class="bar" style="height:6px;"></div>
+        </div>
+        <span style="font-size:11px; color:var(--color-text-tertiary);">Generating...</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="pg-input-area">
+    <textarea class="pg-textarea" placeholder="Enter text to convert to speech"></textarea>
+    <div class="pg-controls">
+      <div class="pg-select">Voice: alloy <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>
+      <div class="pg-select">Format: mp3 <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>
+      <div class="pg-param-row" style="padding:0;">
+        <span class="label" style="font-size:12px;">Speed</span>
+        <div class="control">
+          <input type="range" class="pg-slider" min="0.25" max="4" step="0.25" value="1" />
+          <span style="font-size:11px; color:var(--color-text-secondary); min-width:30px;">1.0x</span>
+        </div>
+      </div>
+      <div style="flex:1"></div>
+      <div class="pg-model-selector">tts-1 <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="10" height="10"><path d="M6 9l6 6 6-6"/></svg></div>
+      <button class="pg-btn pg-btn-primary">Generate &rarr;</button>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>
+function switchMode(mode) {
+  document.querySelectorAll('.pg-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.pg-tab[data-mode="${mode}"]`).classList.add('active');
+  document.querySelectorAll('[id^="mode-"]').forEach(el => el.classList.add('pg-hidden'));
+  document.getElementById('mode-' + mode).classList.remove('pg-hidden');
+}
+
+// Generate audio waveform bars
+['wave1'].forEach(function(id) {
+  var container = document.getElementById(id);
+  if (container) {
+    for (var i = 0; i < 40; i++) {
+      var bar = document.createElement('div');
+      bar.className = 'bar';
+      bar.style.height = (4 + Math.random() * 24) + 'px';
+      container.appendChild(bar);
+    }
+  }
+});
+</script>

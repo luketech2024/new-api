@@ -27,6 +27,7 @@ var requestIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{16,64}$`)
 
 type SecurityOptions struct {
 	TrustedProxies  []string
+	ReadyCheck      func() error
 	RequestObserver interface {
 		ObserveRequest(route, method string, status int, duration time.Duration)
 	}

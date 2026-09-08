@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>支付宝扫码接入 · 原型预览</title>
+  <style>
+    :root {
+      --bg: #eef2f0; --card: #fff; --border: #e4e4e7; --text: #18181b;
+      --muted: #71717a; --alipay: #1677ff; --wx: #07c160; --ok: #16a34a;
+      --danger: #dc2626; --warn: #a56500; --radius: 12px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }
+    button { font: inherit; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    header { background: #fff; border-bottom: 1px solid var(--border); padding: 16px 24px; position: sticky; top: 0; z-index: 8; }
+    header h1 { margin: 0 0 6px; font-size: 18px; }
+    header p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 16px; }
+    .banner { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 10px; padding: 12px 14px; font-size: 13px; line-height: 1.7; margin-bottom: 14px; }
+    .tabs, .scenes { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    .tab, .scene { border: 1px solid var(--border); background: #fff; border-radius: 999px; padding: 7px 14px; font-size: 13px; }
+    .tab.on { background: #18181b; color: #fff; border-color: #18181b; }
+    .scene.on { border-color: var(--alipay); background: #e8f2ff; color: #1d5fd0; font-weight: 600; }
+    .grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 16px; }
+    @media (max-width: 960px) { .grid { grid-template-columns: 1fr; } }
+    .panel { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px; box-shadow: 0 6px 24px rgba(0,0,0,.06); }
+    .ph { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+    .ph h2 { margin: 0; font-size: 16px; }
+    .ph p { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+    .lab { font-size: 11px; letter-spacing: .08em; color: var(--muted); font-weight: 600; margin: 0 0 8px; }
+    .chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .chip { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: #fff; text-align: left; }
+    .chip.on { border-color: #18181b; background: #f4f4f5; }
+    .chip .n { font-size: 20px; font-weight: 700; }
+    .chip .s { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .pays { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+    .payb { border: 1px solid var(--border); border-radius: 10px; padding: 12px; text-align: center; font-size: 14px; background: #fff; }
+    .payb.on.alipay { border-color: var(--alipay); background: #f0f6ff; color: #0958d9; font-weight: 650; }
+    .payb.on.wx { border-color: var(--wx); background: #eaf8ef; color: #16834a; font-weight: 650; }
+    .pay-row { margin-top: 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 13px; color: var(--muted); }
+    .pay-row b { color: var(--text); font-size: 16px; }
+    .primary { width: 100%; margin-top: 14px; border: 0; border-radius: 10px; padding: 12px; background: #18181b; color: #fff; font-weight: 600; }
+    .ghost { border: 1px solid var(--border); background: #fff; border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+    .log { margin-top: 12px; font-size: 12px; color: var(--muted); line-height: 1.7; min-height: 4.2em; }
+    .flag { font-size: 12px; border-radius: 8px; padding: 8px 10px; margin-top: 10px; line-height: 1.6; }
+    .flag.ok { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
+    .flag.bad { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+    .flag.warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid var(--border); padding: 9px 10px; text-align: left; }
+    th { background: #fafafa; font-weight: 600; }
+    .pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 8px; font-size: 12px; font-weight: 600; }
+    .pill.alipay { background: #e8f2ff; color: #1677ff; }
+    .pill.wx { background: #eaf8ef; color: #16834a; }
+    .pill.paid { background: #eaf8ef; color: #16834a; }
+    .pill.review { background: #fff0f0; color: #bb3030; }
+    .pill.pending { background: #fff7e7; color: #a56500; }
+    .cashier { max-width: 420px; margin: 0 auto; overflow: hidden; border-radius: 16px; border: 1px solid #dfe6ee; background: #fff; box-shadow: 0 20px 56px rgba(21,42,63,.12); }
+    .cashier.alipay .hdr { background: linear-gradient(135deg, #1677ff, #4096ff); color: #fff; }
+    .cashier.wx .hdr { background: linear-gradient(135deg, #07c160, #2acb76); color: #fff; }
+    .hdr { padding: 24px 28px 20px; text-align: center; }
+    .brand { margin: 0 0 8px; font-size: 13px; letter-spacing: .08em; font-weight: 650; }
+    .hdr h3 { margin: 0; font-size: 20px; }
+    .cbody { display: grid; justify-items: center; gap: 14px; padding: 24px; text-align: center; }
+    .amt { margin: 0; font-size: 36px; font-weight: 700; }
+    .qr { width: 196px; height: 196px; padding: 10px; border: 1px solid #e0e7ef; border-radius: 12px; background:
+      repeating-conic-gradient(#111 0% 25%, #fff 0% 50%) 0 0 / 14px 14px; }
+    .qr.off { filter: grayscale(1) opacity(.35); }
+    .hint { margin: 0; color: #526173; font-size: 14px; }
+    .status { display: inline-flex; align-items: center; gap: 8px; padding: 6px 11px; border-radius: 999px; background: #eff4f8; color: #526173; font-size: 13px; font-weight: 600; }
+    .status::before { width: 8px; height: 8px; border-radius: 50%; background: currentColor; content: ""; }
+    .status.PAYABLE { background: #eaf8ef; color: #16834a; }
+    .status.PAID_PENDING_NOTIFY { background: #fff7e7; color: #a56500; }
+    .status.NOTIFIED { background: #eaf8ef; color: #16834a; }
+    .status.EXPIRED, .status.CREATE_FAILED, .status.REVIEW { background: #fff0f0; color: #bb3030; }
+    .toast { position: fixed; right: 18px; bottom: 18px; background: #18181b; color: #fff; padding: 10px 14px; border-radius: 10px; font-size: 13px; display: none; z-index: 20; max-width: 320px; }
+    .modal { position: fixed; inset: 0; background: rgba(24,24,27,.45); display: none; place-items: center; z-index: 15; padding: 16px; }
+    .modal.on { display: grid; }
+    .box { width: min(100%, 420px); background: #fff; border-radius: 16px; padding: 20px; }
+    .box h3 { margin: 0 0 6px; }
+    .box p { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+    .kv { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f4f4f5; font-size: 14px; }
+    .row-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+    .note { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.7; }
+    .table-wrap { overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>支付宝扫码接入 · 交互原型</h1>
+    <p>对齐 PRD #57：易支付 <code>type=alipay</code> → 适配器当面付扫码 → 异步通知 → 按订单回调钱包或订阅。页面为评审 Mock，虚构订单不得写入正式 Spec。</p>
+  </header>
+  <div class="wrap">
+    <div class="banner">本仓库前端是 React 19 + Base UI + Tailwind，没有 Vue / Element。本原型用与现有 onespec HTML 相同的单文件样式，模拟钱包、收银台和运维查询，不引入 Element CDN。</div>
+    <div class="scenes" id="scenes"></div>
+    <div class="tabs" id="tabs"></div>
+    <div id="app"></div>
+  </div>
+  <div class="modal" id="modal"></div>
+  <div class="toast" id="toast"></div>
+<script>
+const SCENES = [
+  { id: "happy", label: "正常到账" },
+  { id: "badsig", label: "验签失败" },
+  { id: "mismatch", label: "金额不一致" },
+  { id: "wx", label: "微信支付回归" }
+];
+const TABS = [
+  { id: "wallet", label: "钱包充值" },
+  { id: "sub", label: "订阅购买" },
+  { id: "cashier", label: "适配器收银台" },
+  { id: "ops", label: "运维订单" }
+];
+const AMOUNTS = [
+  { yuan: "0.01", fen: 1, quota: "0.01" },
+  { yuan: "0.10", fen: 10, quota: "0.10" },
+  { yuan: "1.01", fen: 101, quota: "1.01" }
+];
+
+const state = {
+  scene: "happy",
+  tab: "wallet",
+  amount: AMOUNTS[2],
+  method: "alipay",
+  biz: "wallet",
+  loading: false,
+  cashier: null,
+  toastTimer: null,
+  orders: [
+    { no: "TUC20260907001", biz: "钱包充值", type: "alipay", money: "1.01", trade: "202609072200140001", pay: "PAID", notify: "NOTIFY_SUCCESS", notifyPath: "/api/user/epay/notify" },
+    { no: "SUB20260907002", biz: "订阅购买", type: "alipay", money: "0.10", trade: "202609072200140002", pay: "PAID", notify: "NOTIFY_SUCCESS", notifyPath: "/api/user/subscription/epay/notify" },
+    { no: "TUC20260907003", biz: "钱包充值", type: "wxpay", money: "1.00", trade: "wx_4200001234", pay: "PAID", notify: "NOTIFY_SUCCESS", notifyPath: "/api/user/epay/notify" },
+    { no: "TUC20260907004", biz: "钱包充值", type: "alipay", money: "1.01", trade: "202609072200140004", pay: "REVIEW", notify: "未创建", notifyPath: "/api/user/epay/notify" },
+    { no: "TUC20260907005", biz: "钱包充值", type: "alipay", money: "0.01", trade: "202609072200140005", pay: "PAID", notify: "NOTIFY_FAILED", notifyPath: "/api/user/epay/notify" }
+  ]
+};
+
+function toast(text) {
+  const el = document.getElementById("toast");
+  el.textContent = text;
+  el.style.display = "block";
+  clearTimeout(state.toastTimer);
+  state.toastTimer = setTimeout(() => { el.style.display = "none"; }, 2400);
+}
+
+function notifyPath(biz) {
+  return biz === "sub" ? "/api/user/subscription/epay/notify" : "/api/user/epay/notify";
+}
+
+function pillType(type) {
+  return `<span class="pill ${type === "alipay" ? "alipay" : "wx"}">${type === "alipay" ? "支付宝" : "微信"}</span>`;
+}
+
+function pillPay(pay) {
+  const cls = pay === "REVIEW" ? "review" : pay === "PAYING" ? "pending" : "paid";
+  const map = { PAID: "已支付", REVIEW: "人工审查", PAYING: "待支付", CLOSED: "已关闭" };
+  return `<span class="pill ${cls}">${map[pay] || pay}</span>`;
+}
+
+function pillNotify(n) {
+  const cls = n === "NOTIFY_SUCCESS" ? "paid" : n === "NOTIFY_FAILED" || n === "未创建" ? "review" : "pending";
+  return `<span class="pill ${cls}">${n}</span>`;
+}
+
+function renderChrome() {
+  document.getElementById("scenes").innerHTML = SCENES.map(s =>
+    `<button class="scene${state.scene === s.id ? " on" : ""}" data-scene="${s.id}">${s.label}</button>`
+  ).join("");
+  document.getElementById("tabs").innerHTML = TABS.map(t =>
+    `<button class="tab${state.tab === t.id ? " on" : ""}" data-tab="${t.id}">${t.label}</button>`
+  ).join("");
+}
+
+function payPanel(title, desc, biz) {
+  const a = state.amount;
+  const method = state.method;
+  return `
+    <div class="panel">
+      <div class="ph">
+        <div><h2>${title}</h2><p>${desc}</p></div>
+        <span class="pill ${biz === "sub" ? "pending" : "paid"}">${biz === "sub" ? "订阅回调" : "钱包回调"}</span>
+      </div>
+      <p class="lab">到账额度</p>
+      <div class="chips">
+        ${AMOUNTS.map(x => `<button class="chip${a.yuan === x.yuan ? " on" : ""}" data-amt="${x.yuan}"><div class="n">${x.quota}</div><div class="s">应付 ¥${x.yuan}</div></button>`).join("")}
+      </div>
+      <div class="pay-row"><span>待支付（人民币）</span><b>¥${a.yuan}</b></div>
+      <p class="lab" style="margin-top:14px">支付方式</p>
+      <div class="pays">
+        <button class="payb alipay${method === "alipay" ? " on" : ""}" data-method="alipay">支付宝</button>
+        <button class="payb wx${method === "wxpay" ? " on" : ""}" data-method="wxpay">微信支付</button>
+      </div>
+      <button class="primary" id="goPay" ${state.loading ? "disabled" : ""}>${state.loading ? "正在提交易支付…" : "确认支付"}</button>
+      <p class="note">下单字段：type=${method}，money=${a.yuan}，notify_url=${notifyPath(biz)}。浏览器跳转不作为到账依据。</p>
+    </div>
+    <div class="panel">
+      <div class="ph"><div><h2>本次协议核对</h2><p>适配器进单后才出码</p></div></div>
+      <div class="kv"><span>易支付 type</span><b>${method}</b></div>
+      <div class="kv"><span>金额分</span><b>${a.fen}</b></div>
+      <div class="kv"><span>通知地址</span><b>${notifyPath(biz)}</b></div>
+      <div class="kv"><span>当前场景</span><b>${SCENES.find(s => s.id === state.scene).label}</b></div>
+      <div class="log" id="flowLog">选择金额和渠道后点「确认支付」。成功会打开独立收银台，失败会停留在本页。</div>
+    </div>`;
+}
+
+function cashierView() {
+  const c = state.cashier;
+  if (!c) {
+    return `<div class="panel"><h2>还没有待支付订单</h2><p class="note">请先在钱包或订阅里发起一笔支付。支付宝与微信使用不同品牌收银台，二维码不得混用。</p></div>`;
+  }
+  const brand = c.type === "alipay" ? "ALIPAY" : "WECHAT PAY";
+  const hint = {
+    PAYABLE: c.type === "alipay" ? "请使用支付宝扫码完成支付" : "请使用微信扫码完成支付",
+    PAID_PENDING_NOTIFY: "支付已完成，请稍候确认到账结果",
+    NOTIFIED: "已到账。同步跳转只改善体验，到账以异步回调为准。",
+    EXPIRED: "请返回后重新发起支付",
+    CREATE_FAILED: "订单创建失败，未生成支付码",
+    REVIEW: "订单需要人工处理，未自动到账"
+  }[c.status];
+  const statusText = {
+    PAYABLE: c.type === "alipay" ? "等待支付宝支付" : "等待微信支付",
+    PAID_PENDING_NOTIFY: "支付成功，正在更新余额",
+    NOTIFIED: "到账成功",
+    EXPIRED: "订单已过期",
+    CREATE_FAILED: "订单创建失败",
+    REVIEW: "订单需要人工处理"
+  }[c.status];
+  return `
+    <div class="cashier ${c.type === "alipay" ? "alipay" : "wx"}">
+      <section class="hdr"><p class="brand">${brand}</p><h3>${c.subject}</h3></section>
+      <section class="cbody">
+        <div><p class="lab">应付金额</p><p class="amt">¥${c.money}</p></div>
+        <div class="qr${c.status === "PAYABLE" ? "" : " off"}" aria-label="支付二维码"></div>
+        <p class="hint">${hint}</p>
+        <p class="status ${c.status}">${statusText}</p>
+        ${c.status === "PAYABLE" ? `<button class="primary" id="simPay" style="width:auto;padding:10px 18px;background:${c.type === "alipay" ? "var(--alipay)" : "var(--wx)"}">模拟用户已扫码付款</button>` : ""}
+      </section>
+    </div>
+    <p class="note" style="text-align:center">剩余有效时间按 15 分钟展示。页面轮询本地订单状态，不把客户端结果当成已支付。</p>`;
+}
+
+function opsView() {
+  return `
+    <div class="panel">
+      <div class="ph"><div><h2>订单查询</h2><p>授权运维可按商户订单号核对渠道、金额、外部交易号和通知状态</p></div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>商户订单号</th><th>业务</th><th>渠道</th><th>金额</th><th>外部交易号</th><th>支付</th><th>通知</th><th>通知地址</th><th></th></tr></thead>
+          <tbody>
+            ${state.orders.map((o, i) => `<tr>
+              <td>${o.no}</td><td>${o.biz}</td><td>${pillType(o.type)}</td><td>¥${o.money}</td>
+              <td>${o.trade}</td><td>${pillPay(o.pay)}</td><td>${pillNotify(o.notify)}</td>
+              <td>${o.notifyPath}</td>
+              <td>${o.notify === "NOTIFY_FAILED" ? `<button class="ghost" data-retry="${i}">人工重试</button>` : ""}</td>
+            </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+      <p class="note">微信通知打到支付宝订单、或支付宝通知打到微信订单时，不得自动到账。钱包与订阅回调不得串路径。</p>
+    </div>`;
+}
+
+function render() {
+  renderChrome();
+  const app = document.getElementById("app");
+  if (state.tab === "wallet") {
+    state.biz = "wallet";
+    app.className = "grid";
+    app.innerHTML = payPanel("添加资金", "用户在 new-api 钱包选择支付宝或微信", "wallet");
+  } else if (state.tab === "sub") {
+    state.biz = "sub";
+    app.className = "grid";
+    app.innerHTML = payPanel("购买订阅", "订阅走另一条易支付通知地址，不得打进钱包接口", "sub");
+  } else if (state.tab === "cashier") {
+    app.className = "";
+    app.innerHTML = cashierView();
+  } else {
+    app.className = "";
+    app.innerHTML = opsView();
+  }
+}
+
+function openConfirm() {
+  const methodName = state.method === "alipay" ? "支付宝" : "微信支付";
+  document.getElementById("modal").className = "modal on";
+  document.getElementById("modal").innerHTML = `
+    <div class="box">
+      <h3>确认支付</h3>
+      <p>请核对金额与渠道。同步跳转成功不等于到账。</p>
+      <div class="kv"><span>业务</span><b>${state.biz === "sub" ? "订阅购买" : "钱包充值"}</b></div>
+      <div class="kv"><span>支付方式</span><b>${methodName}</b></div>
+      <div class="kv"><span>应付</span><b>¥${state.amount.yuan}</b></div>
+      <div class="row-btns">
+        <button class="ghost" id="cancelPay">取消</button>
+        <button class="primary" id="okPay" style="width:auto;margin:0;padding:10px 16px">去支付</button>
+      </div>
+    </div>`;
+}
+
+function createOrder() {
+  const log = document.getElementById("flowLog");
+  if (state.scene === "badsig" && state.method === "alipay") {
+    if (log) log.innerHTML = `<div class="flag bad">易支付签名或 pid 不合法。适配器拒绝请求，不创建订单，也不调用支付宝。</div>`;
+    toast("下单被拒绝：签名校验失败");
+    return;
+  }
+  if (state.scene === "wx" && state.method === "alipay") {
+    toast("当前场景用于验证微信回归，请改选微信支付");
+    return;
+  }
+  if (state.scene === "wx" && state.method === "wxpay") {
+    state.cashier = {
+      type: "wxpay",
+      subject: state.biz === "sub" ? "订阅套餐 · 专业版" : "账户充值 TUC",
+      money: state.amount.yuan,
+      fen: state.amount.fen,
+      status: "PAYABLE",
+      biz: state.biz,
+      no: "WX" + Date.now().toString().slice(-8)
+    };
+    state.tab = "cashier";
+    toast("微信订单已创建，未走支付宝下单");
+    render();
+    return;
+  }
+  if (state.method === "wxpay") {
+    state.cashier = {
+      type: "wxpay",
+      subject: state.biz === "sub" ? "订阅套餐 · 专业版" : "账户充值 TUC",
+      money: state.amount.yuan,
+      fen: state.amount.fen,
+      status: "PAYABLE",
+      biz: state.biz,
+      no: "WX" + Date.now().toString().slice(-8)
+    };
+    state.tab = "cashier";
+    toast("已进入微信支付收银台");
+    render();
+    return;
+  }
+  state.cashier = {
+    type: "alipay",
+    subject: state.biz === "sub" ? "订阅套餐 · 专业版" : "账户充值 TUC",
+    money: state.amount.yuan,
+    fen: state.amount.fen,
+    status: "PAYABLE",
+    biz: state.biz,
+    no: "ALI" + Date.now().toString().slice(-8)
+  };
+  state.tab = "cashier";
+  toast("支付宝预下单成功，已生成扫码收银台");
+  render();
+}
+
+function simulatePay() {
+  const c = state.cashier;
+  if (!c || c.status !== "PAYABLE") return;
+  if (state.scene === "mismatch" && c.type === "alipay") {
+    c.status = "REVIEW";
+    state.orders.unshift({
+      no: c.no, biz: c.biz === "sub" ? "订阅购买" : "钱包充值", type: "alipay",
+      money: c.money, trade: "20260907MISMATCH", pay: "REVIEW", notify: "未创建",
+      notifyPath: notifyPath(c.biz)
+    });
+    toast("实付金额与订单不一致，已进入人工审查，未通知 new-api");
+    render();
+    return;
+  }
+  c.status = "PAID_PENDING_NOTIFY";
+  render();
+  setTimeout(() => {
+    c.status = "NOTIFIED";
+    const path = notifyPath(c.biz);
+    state.orders.unshift({
+      no: c.no,
+      biz: c.biz === "sub" ? "订阅购买" : "钱包充值",
+      type: c.type,
+      money: c.money,
+      trade: c.type === "alipay" ? "20260907" + c.no.slice(-6) : "wx_" + c.no,
+      pay: "PAID",
+      notify: "NOTIFY_SUCCESS",
+      notifyPath: path
+    });
+    toast(c.biz === "sub" ? "已回调订阅通知地址，未写入钱包" : "已回调钱包通知地址，未写入订阅");
+    render();
+  }, 900);
+}
+
+document.body.addEventListener("click", (e) => {
+  const scene = e.target.closest("[data-scene]");
+  if (scene) { state.scene = scene.dataset.scene; render(); return; }
+  const tab = e.target.closest("[data-tab]");
+  if (tab) { state.tab = tab.dataset.tab; render(); return; }
+  const amt = e.target.closest("[data-amt]");
+  if (amt) { state.amount = AMOUNTS.find(x => x.yuan === amt.dataset.amt); render(); return; }
+  const method = e.target.closest("[data-method]");
+  if (method) { state.method = method.dataset.method; render(); return; }
+  if (e.target.id === "goPay") { openConfirm(); return; }
+  if (e.target.id === "cancelPay") { document.getElementById("modal").className = "modal"; return; }
+  if (e.target.id === "okPay") { document.getElementById("modal").className = "modal"; createOrder(); return; }
+  if (e.target.id === "simPay") { simulatePay(); return; }
+  const retry = e.target.closest("[data-retry]");
+  if (retry) {
+    const order = state.orders[Number(retry.dataset.retry)];
+    order.notify = "NOTIFY_SUCCESS";
+    toast("已复用原通知任务重试，new-api 返回 success");
+    render();
+  }
+});
+
+render();
+</script>
+</body>
+</html>

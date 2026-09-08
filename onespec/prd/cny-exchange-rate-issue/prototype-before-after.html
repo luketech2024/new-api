@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>人民币汇率设置对照 · 钱包充值与订单快照</title>
+  <style>
+    :root { --bg:#eef2f0;--card:#fff;--border:#e4e4e7;--text:#18181b;--muted:#71717a;--blue:#2f8bff;--danger:#dc2626;--ok:#16a34a;--wx:#1aad4b; }
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,"PingFang SC","Microsoft YaHei",sans-serif}
+    header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid var(--border);padding:16px 24px} header h1{margin:0 0 6px;font-size:18px} header p{margin:0;color:var(--muted);font-size:13px;line-height:1.6}
+    .wrap{max-width:1320px;margin:0 auto;padding:16px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.col{display:flex;flex-direction:column;gap:12px}.colhead{font-size:13px;font-weight:700;padding:8px 12px;border-radius:8px}.now .colhead{background:#f1f1f3;color:#52525b}.after .colhead{background:#e8f2ff;color:#1d5fd0}
+    .screen{background:#fff;border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,.08);padding:18px 20px}.screen h2{margin:0 0 4px;font-size:16px}.screen .sub{margin:0 0 12px;color:var(--muted);font-size:12px}.panel{background:#fafafa;border:1px solid #f0f0f1;border-radius:10px;padding:10px 13px}.line{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:6px 0;font-size:13px}.line .k{color:var(--muted)}.line .v{font-weight:600}.sep{height:1px;background:#ececee;margin:7px 0}.field{border:1px solid var(--border);border-radius:7px;padding:8px 10px;background:#fff;font-size:13px}.field.bad{border-color:#fecaca;background:#fff7f7;color:#b91c1c}.field.good{border-color:#bfdbfe;background:#f8fbff}.due{font-size:20px;font-weight:750;color:var(--blue)}.due.bad{color:var(--danger)}
+    .flag{font-size:12px;border-radius:8px;padding:8px 10px;margin-top:8px;line-height:1.55}.flag.bad{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c}.flag.good{background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d}.tag{display:inline-block;font-size:11px;border-radius:999px;padding:1px 7px;margin-left:5px}.tag.bad{background:#fee2e2;color:#b91c1c}.tag.good{background:#dcfce7;color:#15803d}.btn{width:100%;border:1px solid #e4e4e7;border-radius:10px;background:#fff;padding:9px;font-size:14px;margin-top:9px}.paybtn{background:var(--blue);color:#fff;border:none;border-radius:999px;padding:8px 20px}.payrow{display:flex;justify-content:space-between;align-items:center;margin-top:12px}.sel{border:1px solid var(--border);border-radius:999px;padding:6px 14px;font-size:13px}
+    .wxcard{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.08)}.wxtop{background:var(--wx);color:#fff;text-align:center;padding:13px}.wxtop .brand{font-size:11px;letter-spacing:.14em;opacity:.9}.wxtop .sub{font-size:15px;font-weight:700;margin-top:5px}.wxbody{text-align:center;padding:15px}.wxbody .lbl{font-size:12px;color:var(--muted)}.wxbody .amt{font-size:27px;font-weight:700;margin-top:5px}.qr{width:88px;height:88px;margin:10px auto 0;border:1px solid var(--border);border-radius:8px;display:grid;place-items:center;color:var(--muted);font-size:11px}
+    table{width:100%;border-collapse:collapse;font-size:13px;background:#fff;border-radius:10px;overflow:hidden}th,td{border-bottom:1px solid var(--border);padding:9px 10px;text-align:left;vertical-align:top}th{background:#fafafa;font-weight:600}.sec{font-size:15px;margin:22px 0 10px}.note{font-size:12px;color:var(--muted);line-height:1.7}.ask{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-top:16px}.ask h2{margin:0 0 6px;font-size:15px}.ask label{display:block;margin:8px 0;font-size:14px}@media(max-width:1000px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<header>
+  <h1>改动 C · 人民币汇率设置：以「钱包余额 + 添加资金 + 支付确认」为例</h1>
+  <p>固定评审样例：内部余额 <strong>10.00</strong> 美元等值额度、展示汇率 <strong>7.30</strong>、充值售价 <strong>¥5.00 / 1 美元等值额度</strong>、本次实付 <strong>¥12.50</strong>。左边是当前风险还原，右边是拟交付；套餐订阅规则仍以 <code>cny-display-conversion</code> 为准。</p>
+</header>
+<div class="wrap">
+  <div class="grid">
+    <section class="col now">
+      <div class="colhead">现在（线上现状截图还原）</div>
+      <div class="screen"><h2>系统设置 · 货币与充值</h2><p class="sub">一个“汇率”概念被不同页面用于余额显示、支付换算和默认回退。</p>
+        <div class="panel"><div class="line"><span class="k">美元兑换人民币汇率</span><span class="v">7.30</span></div><div class="line"><span class="k">充值倍率</span><span class="v">5.00</span></div><div class="line"><span class="k">配置缺失时</span><span class="v" style="color:var(--danger)">页面各自回退 7.3 / 7 / 1</span></div></div>
+        <div class="flag bad">两个值的用途与生效范围没有在设置页明确区分；余额显示可能正确，但支付与到账金额无法向用户解释。</div>
+      </div>
+      <div class="screen"><h2>钱包 · 添加资金</h2><p class="sub">余额为 10.00 美元等值额度，用户输入人民币充值金额。</p>
+        <div class="panel"><div class="line"><span class="k">可用余额</span><span class="v">¥73.00</span></div><div class="sep"></div><div class="line"><span class="k">充值金额</span><span class="field bad">¥12 <span class="tag bad">输入 ¥12.50 被整数解析</span></span></div><div class="line"><span class="k">预计到账</span><span class="v" style="color:var(--danger)">未明确按 7.30 还是 5.00 计算</span></div></div>
+        <div class="flag bad">小数金额可能被截断；展示汇率与充值售价混用时，用户无法预期到账额度。</div><button class="btn">去支付</button>
+      </div>
+      <div class="screen"><h2>支付确认与订单详情</h2><p class="sub">订单未固化价格依据时，管理员改配置后历史订单无法复核。</p>
+        <div class="panel"><div class="line"><span class="k">确认页应付</span><span class="due bad">来源不明确</span></div><div class="line"><span class="k">订单详情</span><span class="v" style="color:var(--danger)">读取当前售价，历史结果会漂移</span></div></div>
+        <div class="flag bad">确认页、支付请求、收银台和订单详情不能证明使用同一笔金额；管理员变价后可能无法解释旧订单。</div>
+      </div>
+      <div class="wxcard"><div class="wxtop"><div class="brand">WECHAT PAY</div><div class="sub">ADD FUNDS</div></div><div class="wxbody"><div class="lbl">应付金额</div><div class="amt">金额来源不清</div><div class="qr">二维码</div></div></div>
+    </section>
+    <section class="col after">
+      <div class="colhead">改后（拟交付）</div>
+      <div class="screen"><h2>系统设置 · 货币与充值</h2><p class="sub">两个值独立配置、独立说明；允许不同，但不允许用途混用。</p>
+        <div class="panel"><div class="line"><span class="k">展示汇率（CNY / USD）</span><span class="field good">7.30</span></div><div class="line"><span class="k">影响</span><span class="v">余额、额度、价目、用量显示</span></div><div class="sep"></div><div class="line"><span class="k">充值售价（CNY / 1 美元等值额度）</span><span class="field good">5.00</span></div><div class="line"><span class="k">影响</span><span class="v">仅新订单实付与到账换算</span></div></div>
+        <div class="flag good">展示汇率 7.30 与充值售价 5.00 可以不同。非法、缺失或越界配置禁止保存与创建新订单。</div>
+      </div>
+      <div class="screen"><h2>钱包 · 添加资金</h2><p class="sub">余额与充值使用各自明确的口径。</p>
+        <div class="panel"><div class="line"><span class="k">可用余额</span><span class="v">¥73.00 <span class="tag good">10.00 × 7.30</span></span></div><div class="sep"></div><div class="line"><span class="k">本次充值</span><span class="field good">¥12.50</span></div><div class="line"><span class="k">预计到账</span><span class="v">2.50 美元等值额度 <span class="tag good">12.50 ÷ 5.00</span></span></div></div>
+        <div class="flag good">人民币金额全程保留两位小数；展示汇率变化只会让余额显示从 ¥73.00 变为对应新值，不改变本次实付或到账。</div><button class="btn">去支付</button>
+      </div>
+      <div class="screen"><h2>支付确认与订单详情</h2><p class="sub">创建订单即固化售价快照；确认、收银台、订单详情读取同一份快照。</p>
+        <div class="panel"><div class="line"><span class="k">订单号</span><span class="v">TOPUP-20260903-001</span></div><div class="line"><span class="k">应付金额</span><span class="due">¥12.50</span></div><div class="line"><span class="k">到账内部额度</span><span class="v">2.50 美元等值</span></div><div class="line"><span class="k">售价快照</span><span class="v">¥5.00 / 美元等值额度</span></div></div>
+        <div class="flag good">管理员之后修改展示汇率或售价，已创建订单仍为 ¥12.50 → 2.50；只影响新订单。</div><div class="payrow"><span class="sel">微信支付 ⌄</span><button class="paybtn">支付 ¥12.50</button></div>
+      </div>
+      <div class="wxcard"><div class="wxtop"><div class="brand">WECHAT PAY</div><div class="sub">ADD FUNDS</div></div><div class="wxbody"><div class="lbl">应付金额（订单快照）</div><div class="amt">¥12.50</div><div class="qr">二维码</div></div></div>
+      <div class="flag good">收银台金额为 ¥12.50，与钱包确认页、支付入口、订单详情完全一致。</div>
+    </section>
+  </div>
+  <h2 class="sec">这些数字分别改成什么</h2>
+  <table><tr><th>页面 / 字段</th><th>现在（风险）</th><th>改后（拟交付）</th><th>依据 / 不变项</th></tr>
+    <tr><td>管理员设置</td><td style="color:var(--danger)">“汇率”和“充值倍率”用途不清，回退分散</td><td style="color:var(--ok)">展示汇率 7.30、充值售价 5.00 独立说明</td><td>两个值允许不同；非法配置不允许保存</td></tr>
+    <tr><td>钱包余额</td><td>¥73.00，但可能被误用于支付</td><td style="color:var(--ok)">¥73.00</td><td>10.00 × 展示汇率 7.30；内部账本 10.00 不变</td></tr>
+    <tr><td>添加资金</td><td style="color:var(--danger)">¥12.50 可能变为 ¥12</td><td style="color:var(--ok)">¥12.50</td><td>人民币保留两位小数，不使用整数解析</td></tr>
+    <tr><td>到账额度</td><td style="color:var(--danger)">计算来源不明确</td><td style="color:var(--ok)">2.50 美元等值</td><td>12.50 ÷ 充值售价 5.00</td></tr>
+    <tr><td>确认页 / 收银台</td><td style="color:var(--danger)">金额来源无法证明一致</td><td style="color:var(--ok)">均为 ¥12.50</td><td>读取订单创建时的应付金额快照</td></tr>
+    <tr><td>已创建订单</td><td style="color:var(--danger)">配置变化后难以复核</td><td style="color:var(--ok)">¥12.50 → 2.50 固定</td><td>保存售价、应付、到账、货币与配置版本快照</td></tr>
+  </table>
+  <p class="note">不变项：内部额度账本单位、历史订单的既有数据、支付验签与入账幂等不改变。套餐订阅的价格、余额支付与通道收款规则以 <code>../cny-display-conversion/prd.md</code> 为准，本页不重新定义。</p>
+  <div class="ask"><h2>异常配置阻断</h2><label>现在：缺失、非正数或越界配置时，页面可能静默使用 <strong>7.3 / 7 / 1</strong> 等不同回退值。</label><label>改后：后台字段级提示并禁止保存；用户侧提示“充值暂不可用”，禁止新建订单；已创建订单仍读取快照 <strong>¥12.50 → 2.50</strong> 并可查询/完成。</label></div>
+</div>
+</body></html>

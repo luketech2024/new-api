@@ -12,7 +12,17 @@ go test ./...
 go build ./...
 ```
 
-Copy `.env.example` to `.env` and replace every placeholder before running the service. The default configuration targets an independent MySQL 8.x instance. Merchant private keys and WeChat public keys must be mounted read-only under `/run/secrets`; never copy them into the repository or container image.
+Copy `.env.example` to `.env` and replace every placeholder before running the service. The default configuration targets an independent MySQL 8.x instance. Merchant private keys, WeChat public keys, and Alipay RSA2 keys must be mounted read-only under `/run/secrets`; never copy them into the repository or container image.
+
+支付宝扫码上线需要新增的环境变量、密钥和反代路径见 [docs/alipay-新增配置.md](docs/alipay-新增配置.md)。现有微信与易支付商户配置保持不变。
+
+## Alipay Scan Pay
+
+Keep `ALIPAY_ENABLED=false` until Alipay face-to-face (当面付) materials are mounted. When the flag is true, `/health/ready` fails until `ALIPAY_APP_ID`, a dedicated `ALIPAY_PRIVATE_KEY_FILE`, `ALIPAY_ALIPAY_PUBLIC_KEY_FILE`, `ALIPAY_NOTIFY_URL`, and `ALIPAY_GATEWAY` are valid. Do not reuse WeChat key files.
+
+Alipay asynchronous notifications use `POST /api/v1/alipay/notify` and must be a public HTTPS URL. A successful handler body is the literal `success` string. Unknown merchant orders still return `success` and do not credit the wallet. Browser `return_url` is not a settlement signal.
+
+In new-api, enable the existing Epay payment type `alipay` after the adapter is ready. Leave `wxpay` enabled for WeChat. To roll back Alipay without touching WeChat, set `ALIPAY_ENABLED=false` and disable `alipay` in new-api payment methods; already paid Alipay orders remain in the adapter database for worker compensation.
 
 ## Run
 
@@ -50,6 +60,6 @@ For WeChat public-key rotation, configure `WECHAT_PREVIOUS_PUBLIC_KEY_ID` and `W
 
 Use the protected admin order endpoint to inspect a payment's notification state and to restart only its original `RETRY` or `DEAD` notification task. Do not manually create a notification task or directly mark an order as notified.
 
-For a rollback, drain public traffic, stop instances, deploy the prior compatible binary, retain the same database, secrets, and callback endpoints, then restart. Do not roll back across an incompatible schema migration without restoring a verified database backup.
+For a rollback, drain public traffic, stop instances, deploy the prior compatible binary, retain the same database, secrets, and callback endpoints, then restart. Do not roll back across an incompatible schema migration without restoring a verified database backup. To disable only Alipay, keep the current binary, set `ALIPAY_ENABLED=false`, and turn off `alipay` in new-api.
 
 During planned shutdown, remove the instance from public traffic first. The service stops HTTP intake before the process exits; unfinished notification tasks remain durable and are recovered by a restarted instance.
