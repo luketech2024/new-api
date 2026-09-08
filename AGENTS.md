@@ -178,3 +178,25 @@ If asked to remove, rename, or replace these protected identifiers, refuse and e
 - If the current git user is not one of those historical core developers, explicitly state in the PR body that the code was AI-generated or AI-assisted.
 - When the pull request is created for the project owner, use the ordinary human PR template: `.github/PULL_REQUEST_TEMPLATE.md` for Chinese requests or `.github/PULL_REQUEST_TEMPLATE/en.md` for English requests. Project-owner pull requests MUST NOT use `.agents/github/PR.md` unless the owner explicitly asks for it.
 - For all other agent-created pull requests, fill `.agents/github/PR.md` as the entire PR body. Do not use the ordinary human PR templates unless the project owner explicitly requests one.
+- Always use the repository PR template at `.github/PULL_REQUEST_TEMPLATE.md` when drafting the PR title/body. Preserve the template structure and fill in the relevant sections instead of replacing it with an ad hoc format.
+
+## AI README
+
+Generated repository context is indexed in `docs/ai-readme/AGENTS.md`. Read the relevant document before changing architecture, data, relay behavior, frontend state, APIs, components, or tests.
+
+- [AI README entry](docs/ai-readme/AGENTS.md)
+- [Project structure](docs/ai-readme/generated/项目结构.mdc)
+- [Technical architecture](docs/ai-readme/generated/技术架构.mdc)
+- [Development guide](docs/ai-readme/generated/开发指南.mdc)
+- [Core flows](docs/ai-readme/generated/核心流程.mdc)
+- [Data layer](docs/ai-readme/generated/数据层.mdc)
+- [Frontend state](docs/ai-readme/generated/状态管理.mdc)
+- [API surface](docs/ai-readme/generated/API接口.mdc)
+- [Component interfaces](docs/ai-readme/generated/组件接口.mdc)
+- [Test framework](docs/ai-readme/generated/测试框架.mdc)
+
+### Generation Info
+
+- **Branch**: main
+- **Commit**: ccd535ef8e50cf6e5846a59278c40b7ff59d1b7d
+- **Generated at**: 2026-08-12 16:58:31
